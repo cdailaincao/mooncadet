@@ -1,0 +1,939 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lunar Outpost Engineer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap">
+<style>
+/* Layout: full-bleed first-person canvas; glass instrument panels hug the screen edges; menu is a briefing board over a live moonscape. */
+:root{
+  --bg:#05070b; --panel:rgba(9,14,22,.8); --line:rgba(160,190,220,.24); --fg:#e8eef6; --dim:#93a4b8;
+  --accent:#ffb02e; --ok:#4ade80; --bad:#ff5a4d; --info:#5cc8ff;
+  --display:'Rajdhani','Arial Narrow',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--fg);font:13px/1.45 var(--mono)}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none}
+.panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px 14px;backdrop-filter:blur(6px);box-sizing:border-box}
+h1,h2,h3{font-family:var(--display);margin:0;letter-spacing:.06em;text-transform:uppercase;text-wrap:balance}
+.k{display:inline-block;min-width:1.3em;padding:0 .35em;margin-right:.35em;border:1px solid var(--accent);color:var(--accent);border-radius:3px;text-align:center;font-weight:500}
+
+/* HUD */
+#mission{top:16px;left:16px;width:min(340px,46vw)}
+#mission h2{font-size:12px;color:var(--accent);display:flex;justify-content:space-between;gap:8px}
+#obj{margin:8px 0 10px;display:flex;flex-direction:column;gap:3px}
+#obj b{font:600 17px/1.15 var(--display);letter-spacing:.03em}
+#obj span{color:var(--dim);font-size:12px}
+#tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;max-height:36vh;overflow:auto}
+#tasks li{display:flex;gap:8px;color:var(--dim);font-size:12px;line-height:1.3}
+#tasks li::before{content:"";flex:none;width:10px;height:10px;margin-top:2px;border:1px solid var(--dim);box-sizing:border-box}
+#tasks li.cur{color:var(--fg)}
+#tasks li.cur::before{border-color:var(--accent);background:rgba(255,176,46,.25)}
+#tasks li.done{color:#5d7a68;text-decoration:line-through}
+#tasks li.done::before{background:var(--ok);border-color:var(--ok)}
+#dash{top:16px;right:16px;width:min(290px,42vw)}
+#dash h3{font-size:12px;color:var(--info);margin-bottom:8px}
+.row{margin-bottom:7px}
+.row .lab{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);gap:8px}
+.row .lab b{color:var(--fg);font-weight:500;white-space:nowrap}
+.bar{height:5px;background:rgba(255,255,255,.08);margin-top:3px;border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--info);transition:width .25s}
+.row[data-s=ok] i{background:var(--ok)} .row[data-s=warn] i{background:var(--accent)} .row[data-s=bad] i{background:var(--bad)}
+.row[data-s=bad] .lab b{color:var(--bad)} .row[data-s=ok] .lab b{color:var(--ok)}
+#timer{top:16px;left:50%;transform:translateX(-50%);text-align:center;padding:8px 18px}
+#timer small{display:block;color:var(--dim);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+#timer b{font:700 26px/1 var(--display);letter-spacing:.08em}
+#timer.warn b{color:var(--bad);animation:blink .8s steps(2) infinite}
+@keyframes blink{50%{opacity:.35}}
+#cross{position:fixed;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none}
+#cross::before,#cross::after{content:"";position:absolute;background:rgba(255,255,255,.75)}
+#cross::before{left:8px;top:0;width:2px;height:18px;opacity:.0}
+#cross::after{left:7px;top:7px;width:4px;height:4px;border-radius:50%}
+#cross.on::after{background:var(--accent);box-shadow:0 0 0 4px rgba(255,176,46,.28)}
+#prompt{position:fixed;left:50%;top:57%;transform:translateX(-50%);padding:6px 12px;background:var(--panel);border:1px solid var(--accent);border-radius:3px;font-size:13px;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+#toast{position:fixed;left:50%;top:84px;transform:translate(-50%,-8px);opacity:0;pointer-events:none;padding:9px 16px;border-radius:3px;background:var(--panel);border:1px solid var(--info);max-width:min(620px,92vw);text-align:center;transition:.2s}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#toast.err{border-color:var(--bad);color:#ffd2cd} #toast.ok{border-color:var(--ok);color:#d3ffe3}
+#note{left:50%;bottom:92px;transform:translateX(-50%);width:min(520px,92vw);font-size:12px}
+#note b{color:var(--accent)}
+#held{left:16px;bottom:16px;font-size:12px;min-width:150px}
+#held small{display:block;color:var(--dim);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+#help{right:16px;bottom:16px;font-size:11px;color:var(--dim);text-align:right;max-width:min(360px,50vw)}
+#help .k{font-size:10px}
+#det{left:16px;bottom:78px;width:210px;text-align:center}
+#det small{color:var(--dim);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+#det b{display:block;font:700 30px/1.1 var(--display);margin:2px 0 6px}
+#suit{right:16px;bottom:96px;width:210px;font-size:11px}
+#way{position:fixed;pointer-events:none;transform:translate(-50%,-100%);color:var(--accent);font-size:11px;text-shadow:0 0 6px #000;text-align:center}
+#way::after{content:"";display:block;margin:2px auto 0;width:10px;height:10px;background:var(--accent);transform:rotate(45deg)}
+#flash{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 140px rgba(255,60,40,.0);transition:box-shadow .5s}
+#flash.on{box-shadow:inset 0 0 140px rgba(255,60,40,.6);transition:none}
+#lockhint{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:3px;color:var(--dim)}
+
+/* Console modal */
+#modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,94vw);max-height:88vh;overflow:auto;background:rgba(8,12,18,.96);border:1px solid var(--accent);border-radius:4px;padding:16px 18px;z-index:5;box-sizing:border-box}
+#modal header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+#modal h3{color:var(--accent);font-size:16px}
+.prow{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.prow .pl{flex:1 1 150px;min-width:0}
+.prow .pv{font-weight:500;min-width:80px;text-align:right}
+.sec{font:600 12px var(--display);color:var(--info);letter-spacing:.14em;text-transform:uppercase;margin:12px 0 2px}
+.btn{font:500 12px var(--mono);color:var(--accent);background:transparent;border:1px solid var(--accent);padding:6px 12px;border-radius:3px;cursor:pointer}
+.btn:hover:not(:disabled){background:rgba(255,176,46,.15)} .btn:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.sw[data-on="1"]{background:var(--ok);border-color:var(--ok);color:#04140a}
+.btn.big{padding:10px 16px;font-size:13px}
+.lamp{display:inline-block;width:11px;height:11px;border-radius:50%;background:#333;border:1px solid #555;flex:none}
+.lamp[data-s=on]{background:var(--ok);border-color:var(--ok);box-shadow:0 0 8px var(--ok)}
+.lamp[data-s=warn]{background:var(--accent);border-color:var(--accent);box-shadow:0 0 8px var(--accent)}
+.lamp[data-s=bad]{background:var(--bad);border-color:var(--bad);box-shadow:0 0 8px var(--bad)}
+.mbar{width:120px;height:8px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
+.mbar i{display:block;height:100%;background:var(--info);width:0}
+.scr{background:#02080a;border:1px solid #17343a;color:#7affc9;padding:8px 10px;border-radius:3px;font-size:12px;white-space:pre-wrap}
+canvas.gr{width:100%;height:110px;background:#02080a;border:1px solid #17343a;border-radius:3px;display:block}
+
+/* Menu + end */
+.screen{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;overflow:auto}
+[hidden]{display:none!important}
+#menu{background:linear-gradient(180deg,rgba(2,4,8,.55),rgba(2,4,8,.9))}
+.dbar{display:flex;flex-wrap:wrap;gap:10px 28px;margin:0 0 16px;padding:10px 14px;border:1px solid var(--line);background:var(--panel);border-radius:4px}
+.dbar div{font-size:11px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase}.dbar b{display:block;font:700 22px/1.1 var(--display);color:var(--fg);letter-spacing:.04em}
+.card .bd{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--dim)}
+.card .st{padding:1px 7px;border:1px solid var(--dim);border-radius:3px;letter-spacing:.1em}.card.cl .st{border-color:var(--ok);color:var(--ok)}.card.cl{border-color:rgba(74,222,128,.45)}
+.card .stars{color:var(--accent);letter-spacing:.15em}
+#dashBtn{position:fixed;left:16px;bottom:140px;z-index:3}
+#menu .wrap{max-width:1040px;width:100%;margin:auto}
+#menu h1{font-size:clamp(32px,6vw,64px);line-height:.95;letter-spacing:.04em}
+#menu h1 em{font-style:normal;color:var(--accent)}
+#menu .sub{color:var(--dim);max-width:60ch;margin:12px 0 22px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.card .t{font:600 11px var(--display);letter-spacing:.18em;color:var(--accent)}
+.card h2{font-size:20px}
+.card p{margin:0;color:var(--dim);font-size:12px;flex:1}
+.card .meta{font-size:11px;color:var(--info)}
+.ctrl{margin-top:18px;display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--dim);font-size:12px}
+#end{background:rgba(2,4,8,.82)}
+#end .box{max-width:520px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:22px}
+#end h2{font-size:30px;margin-bottom:8px}
+#end.win h2{color:var(--ok)} #end.lose h2{color:var(--bad)}
+#end .stats{display:grid;grid-template-columns:1fr auto;gap:4px 16px;margin:14px 0;color:var(--dim);font-size:12px}
+#end .stats b{color:var(--fg);font-weight:500}
+#end .btns{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:700px){#help{display:none}#tasks{max-height:22vh}}
+@media (prefers-reduced-motion:reduce){#timer.warn b{animation:none}}
+</style>
+<canvas id="c" tabindex="0"></canvas>
+<div id="flash"></div>
+<div id="hud" hidden>
+  <div id="mission" class="panel"><h2><span id="mtitle">Mission</span><span id="prog">0/0</span></h2><div id="obj"></div><ul id="tasks"></ul></div>
+  <div id="dash" class="panel"><h3 id="dashT">Systems</h3><div id="dashRows"></div></div>
+  <div id="timer" class="panel" hidden><small id="timerL">Time</small><b id="timerV">00:00</b></div>
+  <div id="cross"></div>
+  <div id="prompt" hidden></div>
+  <div id="toast"></div>
+  <div id="note" class="panel" hidden></div>
+  <div id="way" hidden><span></span></div>
+  <div id="held" class="panel"><small>Carrying</small><span id="heldT">Nothing</span></div>
+  <div id="det" class="panel" hidden><small>Radiation detector</small><b id="detV">0.00</b><div class="bar"><i id="detB"></i></div><small id="detU">mSv/h</small></div>
+  <div id="suit" class="panel" hidden></div>
+  <div id="help" class="panel"><span class="k">WASD</span>move <span class="k">Shift</span>sprint <span class="k">Space</span>jump <span class="k">E</span>use <span class="k">G</span>drop <span class="k">Q</span>cancel cable<br><span id="helpX"></span></div>
+  <div id="lockhint" hidden>Click the view to capture the mouse. If the mouse cannot be captured, drag to look around.</div>
+</div>
+<div id="modal" hidden><header><h3 id="modalT">Console</h3><button class="btn" id="modalX">Close (E)</button></header><div id="modalBody"></div></div>
+<div id="end" class="screen" hidden><div class="box"><h2 id="endT"></h2><div id="endM"></div><div class="stats" id="endS"></div><div class="btns" id="endB"></div></div></div>
+<div id="menu" class="screen">
+  <div class="wrap">
+    <h1>Lunar Outpost<br><em>Engineer</em></h1>
+    <p class="sub">You are the engineer on the ground. Four jobs keep a Moon base alive: electricity, breathable air, food, and shelter from radiation. Walk, carry, wire, plumb and drive your way through each one. Best on a desktop with keyboard and mouse.</p>
+    <div class="cards" id="cards"></div>
+    <div class="ctrl"><span><span class="k">W A S D</span>move</span><span><span class="k">Mouse</span>look</span><span><span class="k">Space</span>jump (1/6 g)</span><span><span class="k">E</span>interact</span><span><span class="k">G</span>drop item</span><span><span class="k">Q</span>cancel cable</span><span><span class="k">Shift</span>sprint</span></div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* ================= utilities ================= */
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v)), lerp=(a,b,t)=>a+(b-a)*t;
+const sstep=(a,b,x)=>{x=clamp((x-a)/(b-a),0,1);return x*x*(3-2*x)};
+function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const hash=(x,y)=>{const h=Math.sin(x*127.1+y*311.7)*43758.5453;return h-Math.floor(h)};
+function vnoise(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);return lerp(lerp(hash(xi,yi),hash(xi+1,yi),u),lerp(hash(xi,yi+1),hash(xi+1,yi+1),u),v)}
+function fbm(x,y,o=4){let a=.5,s=0,f=1;for(let i=0;i<o;i++){s+=a*vnoise(x*f,y*f);f*=2;a*=.5}return s}
+function h(tag,props,...kids){const e=document.createElement(tag);if(props)for(const k in props){if(k==='on')for(const ev in props.on)e.addEventListener(ev,props.on[ev]);else if(k==='class')e.className=props[k];else if(k==='data')Object.assign(e.dataset,props.data);else e[k]=props[k]}kids.flat().forEach(k=>{if(k!=null&&k!==false)e.append(k.nodeType?k:document.createTextNode(k))});return e}
+const fmt=(v,d=1)=>Number(v).toFixed(d);
+const mmss=s=>{s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+
+/* ================= renderer / scene ================= */
+const canvas=$('#c');
+let renderer;
+try{renderer=new THREE.WebGLRenderer({canvas,antialias:true});}catch(e){document.body.insertAdjacentHTML('beforeend','<div class="screen" style="z-index:20;background:#05070b"><div class="box panel" style="position:static">This game needs WebGL. Please open it in a current desktop browser with hardware acceleration enabled.</div></div>');throw e}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x000000);
+const camera=new THREE.PerspectiveCamera(72,1,.08,3500);scene.add(camera);
+function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+const SUN_DIR=new THREE.Vector3(.8,.42,.46).normalize();
+const SUN_AZ=Math.atan2(SUN_DIR.x,SUN_DIR.z);
+const sun=new THREE.DirectionalLight(0xfff4e6,1.35);sun.position.copy(SUN_DIR).multiplyScalar(100);scene.add(sun);
+const amb=new THREE.AmbientLight(0x8da2c0,.32);scene.add(amb);
+function env(s,a){sun.intensity=s;amb.intensity=a}
+const W=new THREE.Group();scene.add(W);          // mission group
+const D2R=Math.PI/180;
+
+/* ---- sky: stars, sun, Earth ---- */
+const sky=new THREE.Group();scene.add(sky);
+(function(){
+  const N=3500,p=new Float32Array(N*3),R=rng(7);
+  for(let i=0;i<N;i++){const u=R()*2-1,a=R()*6.2832,r=Math.sqrt(1-u*u);p[i*3]=Math.cos(a)*r*1800;p[i*3+1]=u*1800;p[i*3+2]=Math.sin(a)*r*1800}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));
+  sky.add(new THREE.Points(g,new THREE.PointsMaterial({color:0xffffff,size:1.6,sizeAttenuation:false,fog:false})));
+  const g2=new THREE.BufferGeometry(),q=new Float32Array(300*3);
+  for(let i=0;i<300;i++){const u=R()*2-1,a=R()*6.2832,r=Math.sqrt(1-u*u);q[i*3]=Math.cos(a)*r*1790;q[i*3+1]=u*1790;q[i*3+2]=Math.sin(a)*r*1790}
+  g2.setAttribute('position',new THREE.BufferAttribute(q,3));
+  sky.add(new THREE.Points(g2,new THREE.PointsMaterial({color:0xcfe0ff,size:2.6,sizeAttenuation:false})));
+})();
+function radialTex(c1,c2){const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),g=x.createRadialGradient(64,64,0,64,64,64);g.addColorStop(0,c1);g.addColorStop(1,c2);x.fillStyle=g;x.fillRect(0,0,128,128);return new THREE.CanvasTexture(c)}
+const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTex('rgba(255,250,235,1)','rgba(255,220,160,0)'),transparent:true,depthWrite:false,fog:false}));
+sunSpr.scale.set(260,260,1);sunSpr.position.copy(SUN_DIR).multiplyScalar(1650);sky.add(sunSpr);
+function earthTex(){
+  const c=document.createElement('canvas');c.width=512;c.height=256;const x=c.getContext('2d'),R=rng(11);
+  x.fillStyle='#1b4f94';x.fillRect(0,0,512,256);
+  for(let i=0;i<46;i++){x.fillStyle=R()<.7?'#3f7d3a':'#9a8a52';x.beginPath();x.ellipse(R()*512,40+R()*176,10+R()*38,6+R()*22,R()*3,0,6.3);x.fill()}
+  x.fillStyle='#eef3f7';x.fillRect(0,0,512,14);x.fillRect(0,242,512,14);
+  for(let i=0;i<70;i++){x.fillStyle='rgba(255,255,255,'+(.25+R()*.35)+')';x.beginPath();x.ellipse(R()*512,R()*256,8+R()*40,3+R()*8,R()*3,0,6.3);x.fill()}
+  return new THREE.CanvasTexture(c);
+}
+const earth=new THREE.Mesh(new THREE.SphereGeometry(58,48,32),new THREE.MeshLambertMaterial({map:earthTex(),emissive:0x0a1730}));
+const EARTH_DIR=new THREE.Vector3(-.55,.36,-.75).normalize();earth.position.copy(EARTH_DIR).multiplyScalar(1500);sky.add(earth);
+const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTex('rgba(120,170,255,.45)','rgba(60,110,255,0)'),transparent:true,depthWrite:false}));
+halo.scale.set(190,190,1);halo.position.copy(earth.position);sky.add(halo);
+
+/* ---- terrain ---- */
+const T_SIZE=700,T_SEG=230;
+let terrain=null,zones=[],craters=[],bumps=[],rockMesh=null;
+const regTex=(function(){const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');const id=x.createImageData(128,128),R=rng(3);
+  for(let i=0;i<128*128;i++){const v=170+R()*85;id.data[i*4]=v;id.data[i*4+1]=v;id.data[i*4+2]=v;id.data[i*4+3]=255}
+  x.putImageData(id,0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(120,120);return t})();
+function heightAt(x,z){
+  let y=(fbm(x*.012+7,z*.012+3)-.5)*9+(fbm(x*.06,z*.06)-.5)*1.4+(fbm(x*.25,z*.25)-.5)*.18;
+  for(const b of bumps){const d=Math.hypot(x-b.x,z-b.z)/b.r;if(d<3)y+=b.h*Math.exp(-d*d)}
+  for(const c of craters){const dx=x-c.x,dz=z-c.z,d2=dx*dx+dz*dz;if(d2<c.r*c.r*2.4){const t=Math.sqrt(d2)/c.r;if(t<1)y-=c.d*(1-t*t);y+=c.d*.3*Math.exp(-Math.pow((t-1.05)*3.2,2))}}
+  for(const zn of zones){const d=Math.hypot(x-zn.x,z-zn.z);y=lerp(zn.h||0,y,sstep(zn.r,zn.r*1.7,d))}
+  return y;
+}
+function buildTerrain(zl,bl,seed){
+  if(terrain){scene.remove(terrain);terrain.geometry.dispose()}
+  if(rockMesh){scene.remove(rockMesh);rockMesh.geometry.dispose()}
+  zones=zl||[];bumps=bl||[];const R=rng(seed||1);craters=[];
+  for(let i=0;i<48;i++){const r=4+R()*R()*30;craters.push({x:(R()-.5)*T_SIZE*.9,z:(R()-.5)*T_SIZE*.9,r,d:r*(.1+R()*.12)})}
+  const g=new THREE.PlaneGeometry(T_SIZE,T_SIZE,T_SEG,T_SEG);g.rotateX(-Math.PI/2);
+  const p=g.attributes.position,col=new Float32Array(p.count*3);
+  for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),y=heightAt(x,z);p.setY(i,y);const n=fbm(x*.35,z*.35),c=.34+n*.24+clamp(y*.012,-.06,.08);col[i*3]=c*1.02;col[i*3+1]=c;col[i*3+2]=c*.95}
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();
+  terrain=new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true,map:regTex}));scene.add(terrain);
+  // distant ridge ring hides the terrain edge
+  const ring=new THREE.Group();const RM=new THREE.MeshLambertMaterial({color:0x6d6d70});
+  for(let i=0;i<46;i++){const a=i/46*6.2832,r=325+R()*20,hh=30+R()*50,rr=55+R()*35;const m=new THREE.Mesh(new THREE.ConeGeometry(rr,hh,9),RM);m.position.set(Math.cos(a)*r,hh/2-8,Math.sin(a)*r);ring.add(m)}
+  terrain.add(ring);
+  const NR=420;rockMesh=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0),new THREE.MeshLambertMaterial({color:0x7a7a7c}),NR);
+  const M4=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler(),s=new THREE.Vector3(),pp=new THREE.Vector3();let n=0;
+  while(n<NR){const x=(R()-.5)*480,z=(R()-.5)*480;if(zones.some(zn=>Math.hypot(x-zn.x,z-zn.z)<zn.r*1.15))continue;const sc=.12+R()*R()*1.6;
+    pp.set(x,heightAt(x,z)+sc*.25,z);e.set(R()*3,R()*3,R()*3);q.setFromEuler(e);s.set(sc,sc*(.5+R()*.4),sc*(.7+R()*.5));M4.compose(pp,q,s);rockMesh.setMatrixAt(n++,M4)}
+  scene.add(rockMesh);
+}
+
+/* ---- colliders & player ---- */
+const colliders=[];
+function addBox(cx,cz,w,d,y0=-50,y1=50){const b={x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2,y0,y1,on:true};colliders.push(b);return b}
+function collide(pos,rad){
+  for(const b of colliders){
+    if(!b.on||pos.y>b.y1||pos.y<b.y0-2)continue;
+    const nx=clamp(pos.x,b.x0,b.x1),nz=clamp(pos.z,b.z0,b.z1),dx=pos.x-nx,dz=pos.z-nz,d2=dx*dx+dz*dz;
+    if(d2<rad*rad){
+      if(d2>1e-8){const d=Math.sqrt(d2);pos.x=nx+dx/d*rad;pos.z=nz+dz/d*rad}
+      else{const l=pos.x-b.x0,r=b.x1-pos.x,t=pos.z-b.z0,bt=b.z1-pos.z,m=Math.min(l,r,t,bt);
+        if(m===l)pos.x=b.x0-rad;else if(m===r)pos.x=b.x1+rad;else if(m===t)pos.z=b.z0-rad;else pos.z=b.z1+rad}
+    }
+  }
+}
+const P={pos:new THREE.Vector3(),vx:0,vz:0,vy:0,yaw:0,pitch:0,ground:true,mode:'walk',stride:0};
+const K={};
+const S={state:'menu',modal:false,time:0,t0:0,idx:-1,mission:null,locked:false,drag:false,md:false,errors:0,focus:null,pending:null,mid:0,hudT:0};
+const M={tasks:[],wp:null,timer:null};
+
+/* ================= audio ================= */
+const AU={c:null,m:null,noise:null,humG:null,alarmG:null,pumpG:null};
+function auInit(){
+  if(AU.c){if(AU.c.state==='suspended')AU.c.resume();return}
+  try{
+    const c=AU.c=new(window.AudioContext||window.webkitAudioContext)(),m=AU.m=c.createGain();m.gain.value=.55;m.connect(c.destination);
+    const nb=c.createBuffer(1,c.sampleRate*2,c.sampleRate),d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;AU.noise=nb;
+    const o1=c.createOscillator(),o2=c.createOscillator(),lp=c.createBiquadFilter(),g=c.createGain();o1.type='sawtooth';o1.frequency.value=52;o2.type='sine';o2.frequency.value=104;lp.type='lowpass';lp.frequency.value=240;g.gain.value=0;o1.connect(lp);o2.connect(lp);lp.connect(g);g.connect(m);o1.start();o2.start();AU.humG=g;
+    const ao=c.createOscillator(),ag=c.createGain(),lf=c.createOscillator(),lg=c.createGain();ao.type='square';ao.frequency.value=720;lf.frequency.value=1.7;lg.gain.value=190;lf.connect(lg);lg.connect(ao.frequency);ag.gain.value=0;ao.connect(ag);ag.connect(m);ao.start();lf.start();AU.alarmG=ag;
+    const ns=c.createBufferSource();ns.buffer=nb;ns.loop=true;const bp=c.createBiquadFilter();bp.type='bandpass';bp.frequency.value=650;bp.Q.value=.8;const pg=c.createGain();pg.gain.value=0;ns.connect(bp);bp.connect(pg);pg.connect(m);ns.start();AU.pumpG=pg;
+  }catch(e){AU.c=null}
+}
+function setLevels(hum,alarm,pump){if(!AU.c)return;const t=AU.c.currentTime;AU.humG.gain.setTargetAtTime(hum*.09,t,.3);AU.alarmG.gain.setTargetAtTime(alarm*.05,t,.1);AU.pumpG.gain.setTargetAtTime(pump*.12,t,.3)}
+function tone(f,d=.12,type='sine',v=.2,f2){if(!AU.c)return;const c=AU.c,t=c.currentTime,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(AU.m);o.start(t);o.stop(t+d+.03)}
+function tick(v=.12){if(!AU.c)return;const c=AU.c,s=c.createBufferSource(),g=c.createGain();s.buffer=AU.noise;g.gain.setValueAtTime(v,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.03);s.connect(g);g.connect(AU.m);s.start(c.currentTime,Math.random()*1.5,.04)}
+const sfx={
+  click:()=>tone(900,.05,'square',.07),pick:()=>tone(420,.1,'triangle',.18,640),place:()=>{tone(170,.2,'sine',.3,80);tick(.2)},
+  ok:()=>{tone(660,.1,'sine',.16);setTimeout(()=>tone(990,.14,'sine',.16),90)},err:()=>tone(150,.3,'sawtooth',.2,100),
+  chime:()=>[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.28,'sine',.18),i*110)),
+  connect:()=>{tone(300,.08,'square',.1);setTimeout(()=>tone(620,.1,'square',.09),70)},step:()=>tone(75,.09,'sine',.1,45),
+  win:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.4,'triangle',.2),i*150)),lose:()=>[330,262,196,131].forEach((f,i)=>setTimeout(()=>tone(f,.5,'sawtooth',.16),i*220)),
+  valve:()=>{tone(210,.25,'square',.08,120);tick(.1)},zap:()=>tone(1200,.3,'sawtooth',.06,300)
+};
+
+/* ================= HUD helpers ================= */
+function say(msg,kind='info'){const t=$('#toast');t.textContent=msg;t.className='show '+kind;clearTimeout(say._t);say._t=setTimeout(()=>{t.className=''},kind==='err'?4600:3600);if(kind==='err'){S.errors++;sfx.err();flash()}else if(kind==='ok')sfx.ok()}
+function flash(){const f=$('#flash');f.classList.add('on');setTimeout(()=>f.classList.remove('on'),120)}
+function note(html,ms=9000){const n=$('#note');n.innerHTML=html;n.hidden=false;clearTimeout(note._t);if(ms)note._t=setTimeout(()=>{n.hidden=true},ms)}
+function later(ms,fn){const id=S.mid;setTimeout(()=>{if(id===S.mid&&S.state==='play')fn()},ms)}
+const cur=()=>M.tasks.find(t=>!t.done);
+function setTasks(l){M.tasks=l.map(t=>({...t,done:false}));renderTasks()}
+function renderTasks(){
+  const c=cur();
+  $('#tasks').innerHTML=M.tasks.map(t=>`<li class="${t.done?'done':''} ${t===c?'cur':''}">${t.text}</li>`).join('');
+  $('#obj').innerHTML=c?`<b>${c.text}</b><span>${c.hint||''}</span>`:'<b>All tasks complete</b>';
+  $('#prog').textContent=M.tasks.filter(t=>t.done).length+'/'+M.tasks.length;
+}
+function done(id){const t=M.tasks.find(t=>t.id===id);if(!t||t.done)return false;t.done=true;sfx.chime();renderTasks();say('Task complete: '+t.text,'ok');return true}
+const isDone=id=>{const t=M.tasks.find(t=>t.id===id);return !!(t&&t.done)};
+let DASH={};
+function dashInit(title,defs){$('#dashT').textContent=title;DASH={};const box=$('#dashRows');box.innerHTML='';defs.forEach(d=>{const b=h('b'),i=h('i'),r=h('div',{class:'row'},h('div',{class:'lab'},h('span',null,d.l),b),h('div',{class:'bar'},i));box.append(r);DASH[d.k]={d,b,i,r}})}
+function dash(k,v,txt,st){const e=DASH[k];if(!e)return;e.b.textContent=txt!=null?txt:fmt(v);const mn=e.d.min||0;e.i.style.width=clamp((v-mn)/((e.d.max||100)-mn),0,1)*100+'%';e.r.dataset.s=st||''}
+function setTimer(label,sec,warnAt=30){const t=$('#timer');if(sec==null){t.hidden=true;return}t.hidden=false;$('#timerL').textContent=label;$('#timerV').textContent=mmss(sec);t.classList.toggle('warn',sec<=warnAt)}
+function way(p,label){M.wp=p?{p:p.isVector3?p:new THREE.Vector3(p.x,p.y,p.z),label}:null}
+function wpUpdate(){
+  const el=$('#way');if(!M.wp||S.modal||S.state!=='play'){el.hidden=true;return}
+  const v=M.wp.p.clone().project(camera);if(v.z>1){el.hidden=true;return}
+  el.hidden=false;el.style.left=clamp((v.x*.5+.5)*innerWidth,50,innerWidth-50)+'px';el.style.top=clamp((-v.y*.5+.5)*innerHeight,60,innerHeight-30)+'px';
+  el.firstChild.textContent=M.wp.label+' · '+Math.round(M.wp.p.distanceTo(camera.position))+' m';
+}
+function updateHeld(){$('#heldT').textContent=held?held.label:'Nothing'}
+function updateHint(){const el=$('#lockhint');el.hidden=!(S.state==='play'&&!S.locked&&!S.modal&&!S.hintOff);el.textContent=S.drag?'Mouse capture is blocked here: hold the mouse button and drag to look around (arrow keys also turn).':'Click the view to capture the mouse. Press Esc to release it.'}
+
+/* ================= models ================= */
+const mat=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.65,metalness:.2},o));
+const glow=c=>new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:1.3});
+function box(w,hh,d,c,x=0,y=0,z=0,o){const m=new THREE.Mesh(new THREE.BoxGeometry(w,hh,d),mat(c,o));m.position.set(x,y,z);return m}
+function cyl(rt,rb,hh,c,x=0,y=0,z=0,seg=20,o){const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,hh,seg),mat(c,o));m.position.set(x,y,z);return m}
+function sph(r,c,x=0,y=0,z=0,o){const m=new THREE.Mesh(new THREE.SphereGeometry(r,18,12),mat(c,o));m.position.set(x,y,z);return m}
+function lamp(c,x,y,z,r=.06){const m=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),glow(c));m.position.set(x,y,z);m.userData.noHL=true;return m}
+function setLamp(m,c,on){m.material.color.setHex(on?c:0x222222);m.material.emissive.setHex(on?c:0x000000)}
+function grp(...k){const g=new THREE.Group();k.forEach(x=>g.add(x));return g}
+const tagCache={};
+function tag(text,y=2,color='#ffb02e'){
+  const key=text+color;let tex=tagCache[key];
+  if(!tex){const c=document.createElement('canvas');c.width=320;c.height=64;const x=c.getContext('2d');x.fillStyle='rgba(5,9,14,.72)';x.fillRect(0,8,320,48);x.strokeStyle=color;x.lineWidth=2;x.strokeRect(1,9,318,46);x.fillStyle=color;x.font='600 26px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(text,160,33);tex=tagCache[key]=new THREE.CanvasTexture(c)}
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));s.scale.set(2.4,.48,1);s.position.y=y;s.raycast=()=>{};s.userData.noHL=true;return s;
+}
+
+/* ================= interaction ================= */
+const its=[];let held=null;const ray=new THREE.Raycaster();
+function addIt(root,o){const it=Object.assign({root,range:4.4,enabled:()=>true,prompt:()=>null,use(){}},o);root.userData.it=it;its.push(it);return it}
+function remIt(it){const i=its.indexOf(it);if(i>=0)its.splice(i,1)}
+function deepVisible(o){while(o){if(!o.visible)return false;o=o.parent}return true}
+function setHL(it,on){it.root.traverse(o=>{if(o.userData.noHL||!o.material||!o.material.emissive)return;if(on){if(o.userData._e===undefined)o.userData._e=o.material.emissive.getHex();o.material.emissive.setHex(0x5a3d00)}else if(o.userData._e!==undefined){o.material.emissive.setHex(o.userData._e);delete o.userData._e}})}
+function focusUpdate(){
+  let f=null,pr=null;
+  if(S.state==='play'&&!S.modal&&P.mode!=='frozen'){
+    ray.setFromCamera({x:0,y:0},camera);ray.far=P.mode==='rover'?8:6;
+    const tg=[];for(const it of its)if(it.enabled()&&deepVisible(it.root))tg.push(it.root);
+    const hits=ray.intersectObjects(tg,true);
+    for(const hit of hits){let o=hit.object;while(o&&!o.userData.it)o=o.parent;if(!o)continue;const it=o.userData.it;if(hit.distance<=it.range){const p=it.prompt();if(p){f=it;pr=p;break}}}
+  }
+  if(f!==S.focus){if(S.focus)setHL(S.focus,false);if(f)setHL(f,true);S.focus=f}
+  const pe=$('#prompt');if(f){pe.hidden=false;pe.innerHTML='<span class="k">E</span>'+pr}else pe.hidden=true;
+  $('#cross').classList.toggle('on',!!f);
+}
+function interact(){auInit();if(S.focus)S.focus.use()}
+function dropOrCancel(){if(S.pending){cancelPending();return}if(held&&!held.noDrop)dropHeld()}
+
+/* ---- equipment ---- */
+function makeEquip(type,label,model,o={}){
+  const eq=Object.assign({type,label,model,state:'loose',ports:[],holdScale:.5,slot:null},o);
+  model.add(tag(label,o.tagY||2.2));
+  eq.it=addIt(model,{range:4.6,enabled:()=>eq.state!=='held',prompt:()=>eq.state==='loose'?(held?null:'Pick up '+label):(eq.instPrompt?eq.instPrompt():null),use:()=>{if(eq.state==='loose')pickUp(eq);else if(eq.onUse)eq.onUse()}});
+  model.userData.eq=eq;return eq;
+}
+function pickUp(eq){
+  if(held){say('Your hands are full. Install or drop (G) the '+held.label+' first.','err');return}
+  eq.state='held';held=eq;if(eq.model.parent)eq.model.parent.remove(eq.model);camera.add(eq.model);
+  eq.model.position.set(.36,-.34,-.95);eq.model.rotation.set(0,.35,0);eq.model.scale.setScalar(eq.holdScale);sfx.pick();updateHeld();if(eq.onPick)eq.onPick();
+}
+function dropHeld(){
+  if(!held)return;const eq=held;held=null;camera.remove(eq.model);
+  const x=P.pos.x-Math.sin(P.yaw)*1.6,z=P.pos.z-Math.cos(P.yaw)*1.6;
+  eq.model.position.set(x,heightAt(x,z),z);eq.model.rotation.set(0,P.yaw,0);eq.model.scale.setScalar(1);W.add(eq.model);eq.state='loose';updateHeld();sfx.place();if(eq.onDrop)eq.onDrop();
+}
+function makeSlot(o){
+  const g=new THREE.Group();g.position.copy(o.pos);g.rotation.y=o.rotY||0;
+  const sz=o.size||[1.5,1.5,1];
+  const gh=new THREE.Mesh(new THREE.BoxGeometry(...sz),new THREE.MeshBasicMaterial({color:0x4ae0ff,transparent:true,opacity:.2,depthWrite:false}));gh.position.y=sz[1]/2+.02;g.add(gh);
+  const ed=new THREE.LineSegments(new THREE.EdgesGeometry(gh.geometry),new THREE.LineBasicMaterial({color:0x6ff0ff}));ed.position.copy(gh.position);g.add(ed);
+  const pad=new THREE.Mesh(new THREE.PlaneGeometry(sz[0]+.5,sz[2]+.5),new THREE.MeshBasicMaterial({color:0xffb02e,transparent:true,opacity:.22,depthWrite:false}));pad.rotation.x=-Math.PI/2;pad.position.y=.04;g.add(pad);
+  g.add(tag(o.label,sz[1]+.5,'#6ff0ff'));
+  const s=Object.assign({ghost:g,gh,eq:null,active:true,pulse:false},o);
+  s.it=addIt(g,{range:5.2,enabled:()=>s.active&&!s.eq,
+    prompt:()=>held?(held.type===o.accepts?'Install '+held.label+' here':'This slot needs '+o.label):'Empty mount: needs '+o.label,
+    use:()=>{
+      if(!held){say('This mount needs '+o.label+'. '+(o.hint||'Fetch it from the supply area.'),'info');return}
+      if(held.type!==o.accepts){say(held.label+' does not fit here. This mount is for '+o.label+'.','err');return}
+      const m=o.filter&&o.filter(held,s);if(m){say(m,'err');return}
+      placeEquip(held,s);
+    }});
+  W.add(g);return s;
+}
+function placeEquip(eq,slot){
+  held=null;camera.remove(eq.model);W.add(eq.model);eq.model.position.copy(slot.pos);eq.model.rotation.set(0,slot.rotY||0,0);eq.model.scale.setScalar(1);
+  eq.state='installed';eq.slot=slot;slot.eq=eq;slot.ghost.visible=false;eq.ports.forEach(p=>p.enabled=true);sfx.place();updateHeld();
+  if(eq.colBox!==false){const sz=eq.colSize||(slot.size?[slot.size[0],slot.size[2]]:[1,1]);const rot=Math.abs(Math.sin(slot.rotY||0))>.7;eq.col=addBox(slot.pos.x,slot.pos.z,rot?sz[1]:sz[0],rot?sz[0]:sz[1],-5,Math.max(2,(slot.size||[0,2])[1]))}
+  if(eq.onInstall)eq.onInstall(slot);
+}
+
+/* ---- ports & cables ---- */
+const conns=[];const rb=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),new THREE.LineBasicMaterial({color:0xffd24a}));rb.frustumCulled=false;rb.visible=false;scene.add(rb);
+const CK={dc:[0xd9a21b,0xffe08a,.035],ac:[0x3bb273,0xb9ffd5,.04],water:[0x2f6fe0,0x9fd0ff,.07],o2:[0x6fd6ee,0xffffff,.07],h2:[0xe05aa6,0xffc4e3,.06],co2:[0x8a8f97,0xe0e4ea,.07],air:[0xaab7c8,0xffffff,.2]};
+function makePort(eq,o){
+  const g=new THREE.Group();g.position.set(o.x,o.y,o.z);eq.model.add(g);
+  const col=o.color||CK[o.kind][1];
+  const ball=new THREE.Mesh(new THREE.SphereGeometry(.12,12,10),glow(col));ball.userData.noHL=true;g.add(ball);
+  const hit=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false}));g.add(hit);
+  const p=Object.assign({eq,g,ball,conn:null,enabled:!!o.enabled,pulse:false,role:'bi'},o);
+  p.it=addIt(g,{range:4.6,enabled:()=>p.enabled&&eq.state==='installed',prompt:()=>portPrompt(p),use:()=>portUse(p)});
+  eq.ports.push(p);return p;
+}
+function portPrompt(p){
+  if(S.pending){return S.pending===p?'Cancel cable':'Connect to <b>'+p.label+'</b>'}
+  return p.conn?'Unplug cable at <b>'+p.label+'</b>':'Pick up cable at <b>'+p.label+'</b>';
+}
+function portUse(p){
+  if(!S.pending){
+    if(p.conn){const m=S.mission.canUnplug&&S.mission.canUnplug(p.conn);if(m){say(m,'err');return}const o=p.conn.a===p?p.conn.b:p.conn.a;removeCable(p.conn);S.pending=o;say('Cable detached. Plug it into another port, or press Q to leave it off.','info');sfx.click();return}
+    S.pending=p;sfx.click();say('Holding the '+p.kind.toUpperCase()+' line from '+p.label+'. Now choose the matching port.','info');return;
+  }
+  if(S.pending===p){S.pending=null;say('Cable put back.');return}
+  tryConnect(S.pending,p);
+}
+function cancelPending(){if(S.pending){S.pending=null;say('Cable put back.')}}
+function tryConnect(a,b){
+  let msg=null;
+  if(a.conn||b.conn)msg='That port already has a cable. Select it first to unplug it.';
+  else if(a.eq===b.eq)msg='A cable looped back into the same unit does nothing.';
+  else if(a.kind!==b.kind)msg='Incompatible lines: a '+a.kind.toUpperCase()+' line cannot join a '+b.kind.toUpperCase()+' port.';
+  else if(a.role===b.role&&a.role!=='bi')msg=a.label+' and '+b.label+' are both '+(a.role==='src'?'outputs':'inputs')+'. Join an output to an input.';
+  else msg=S.mission.rules?S.mission.rules(a,b):null;
+  if(msg){S.pending=null;say(msg,'err');return}
+  makeCable(a,b);S.pending=null;sfx.connect();say('Connected: '+a.label+' to '+b.label,'ok');
+  if(S.mission.onConnect)S.mission.onConnect();
+}
+const _v=new THREE.Vector3(),_m=new THREE.Matrix4();
+function wpos(o){const v=new THREE.Vector3();o.getWorldPosition(v);return v}
+function makeCable(a,b){
+  if(a.role==='dst'&&b.role!=='dst'){const t=a;a=b;b=t}
+  const pa=wpos(a.g),pb=wpos(b.g),len=pa.distanceTo(pb),mid=pa.clone().lerp(pb,.5);
+  mid.y=Math.max(mid.y-Math.min(len*.1+.25,2.2),heightAt(mid.x,mid.z)+.15);
+  const curve=new THREE.QuadraticBezierCurve3(pa,mid,pb),ck=CK[a.kind];
+  const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,Math.max(10,Math.round(len*3)),ck[2],8,false),mat(ck[0],{roughness:.5}));W.add(mesh);
+  const n=Math.max(3,Math.round(len/1.1)),fl=new THREE.InstancedMesh(new THREE.SphereGeometry(Math.max(.06,ck[2]*1.25),8,6),new THREE.MeshBasicMaterial({color:ck[1]}),n);
+  fl.frustumCulled=false;fl.visible=false;W.add(fl);
+  const c={a,b,curve,mesh,flow:fl,len,speed:a.kind==='air'?3:2.2,kind:a.kind,on:()=>false};a.conn=b.conn=c;conns.push(c);return c;
+}
+function removeCable(c){c.a.conn=c.b.conn=null;W.remove(c.mesh);W.remove(c.flow);c.mesh.geometry.dispose();c.flow.geometry.dispose();const i=conns.indexOf(c);if(i>=0)conns.splice(i,1)}
+function updateFlows(){
+  for(const c of conns){
+    const on=c.on();c.flow.visible=on;if(!on)continue;
+    const n=c.flow.count;for(let i=0;i<n;i++){const t=((i/n)+S.time*c.speed/c.len)%1;c.curve.getPointAt(t,_v);_m.setPosition(_v);c.flow.setMatrixAt(i,_m)}c.flow.instanceMatrix.needsUpdate=true;
+  }
+  if(S.pending){const a=wpos(S.pending.g),b=_v.set(0,-.25,-1.3).applyMatrix4(camera.matrixWorld);rb.geometry.setFromPoints([a,b.clone()]);rb.visible=true}else rb.visible=false;
+}
+/* pulse guides: ports/slots flagged .pulse breathe so the next target is easy to spot */
+function updatePulses(){
+  const k=1+.35*Math.sin(S.time*6);
+  for(const s of S.mission?S.mission.slots||[]:[]){if(s.eq){continue}s.gh.material.opacity=s.pulse?.2+.22*Math.sin(S.time*5)**2:.12}
+  for(const c of S.mission?S.mission.allPorts?S.mission.allPorts():[]:[]){c.ball.scale.setScalar(c.pulse&&!c.conn?k*1.5:1)}
+}
+
+/* ================= game loop pieces ================= */
+function updatePlayer(dt){
+  if(S.state!=='play')return;
+  if(K.ArrowLeft)P.yaw+=1.9*dt;if(K.ArrowRight)P.yaw-=1.9*dt;if(K.ArrowUp)P.pitch=clamp(P.pitch+1.4*dt,-1.45,1.45);if(K.ArrowDown)P.pitch=clamp(P.pitch-1.4*dt,-1.45,1.45);
+  if(S.modal||P.mode!=='walk')return;
+  const fw=(K.KeyW?1:0)-(K.KeyS?1:0),st=(K.KeyD?1:0)-(K.KeyA?1:0),sp=(K.ShiftLeft||K.ShiftRight)?6.6:4.3,sy=Math.sin(P.yaw),cy=Math.cos(P.yaw);
+  let tx=-sy*fw+cy*st,tz=-cy*fw-sy*st;const l=Math.hypot(tx,tz);if(l>0){tx/=l;tz/=l}
+  const ac=Math.min(1,(P.ground?7:1.1)*dt);P.vx+=(tx*sp-P.vx)*ac;P.vz+=(tz*sp-P.vz)*ac;
+  P.pos.x+=P.vx*dt;P.pos.z+=P.vz*dt;
+  if(K.Space&&P.ground){P.vy=2.8;P.ground=false;sfx.step()}
+  P.vy-=1.62*dt;P.pos.y+=P.vy*dt;
+  collide(P.pos,.45);
+  const R=Math.hypot(P.pos.x,P.pos.z);if(R>250){P.pos.x*=250/R;P.pos.z*=250/R}
+  const gy=heightAt(P.pos.x,P.pos.z);
+  if(P.ground&&P.vy<=0&&P.pos.y-gy<.35)P.pos.y=gy;
+  if(P.pos.y<=gy){P.pos.y=gy;P.vy=0;if(!P.ground){P.ground=true;sfx.step()}}else if(P.pos.y>gy+.06)P.ground=false;
+  const spd=Math.hypot(P.vx,P.vz);if(P.ground&&spd>.5){P.stride+=spd*dt;if(P.stride>2.1){P.stride=0;sfx.step()}}
+}
+function camUpdate(){
+  if(P.mode==='walk'||P.mode==='frozen'){const spd=Math.hypot(P.vx,P.vz),bob=P.ground?Math.sin(S.time*8)*.035*Math.min(1,spd/4):0;camera.position.set(P.pos.x,P.pos.y+1.7+bob,P.pos.z)}
+  camera.rotation.set(P.pitch,P.yaw,0,'YXZ');
+}
+let hudAcc=0;
+function frame(dt){
+  S.time+=dt;
+  sky.position.copy(camera.position);earth.rotation.y+=dt*.02;
+  if(S.state==='menu'){P.yaw+=dt*.04;P.pitch=.05;camera.position.set(0,heightAt(0,0)+2.4,0);camera.rotation.set(.05,P.yaw,0,'YXZ');return}
+  if(S.state!=='play')return;
+  updatePlayer(dt);
+  if(S.mission&&S.mission.update)S.mission.update(dt);
+  camUpdate();
+  focusUpdate();updateFlows();updatePulses();wpUpdate();
+  hudAcc+=dt;if(hudAcc>.12){hudAcc=0;if(S.mission&&S.mission.hud)S.mission.hud();if(S.panelUpd)S.panelUpd()}
+}
+let last=performance.now();
+function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;try{frame(dt)}catch(e){console.error(e)}renderer.render(scene,camera)}
+
+/* ================= panels (console modals) ================= */
+function openPanel(title,build){S.modal=true;S.focus&&setHL(S.focus,false);S.focus=null;if(document.exitPointerLock)document.exitPointerLock();$('#modalT').textContent=title;const b=$('#modalBody');b.innerHTML='';S.panelUpd=build(b)||null;if(S.panelUpd)S.panelUpd();$('#modal').hidden=false;$('#prompt').hidden=true;updateHint()}
+function closePanel(){if(!S.modal)return;S.modal=false;$('#modal').hidden=true;S.panelUpd=null;updateHint();if(S.state==='play')lock()}
+$('#modalX').addEventListener('click',closePanel);
+const lampSet=(el,s)=>{el.dataset.s=s||''};
+function mkLamp(){return h('i',{class:'lamp'})}
+function mkBtn(t,fn,cls=''){return h('button',{class:'btn '+cls,textContent:t,on:{click:()=>{auInit();sfx.click();fn()}}})}
+function mkRow(label,...k){return h('div',{class:'prow'},h('span',{class:'pl'},label),...k)}
+function mkMeter(){const i=h('i');const d=h('div',{class:'mbar'},i);d.set=(v,c)=>{i.style.width=clamp(v,0,100)+'%';i.style.background=c||''};return d}
+
+/* ================= mission lifecycle ================= */
+const MISSIONS=[];
+function disposeObj(o){o.traverse(c=>{if(c.geometry)c.geometry.dispose();if(c.material)(Array.isArray(c.material)?c.material:[c.material]).forEach(m=>m.dispose())})}
+function clearMission(){
+  S.mid++;S.modal=false;$('#modal').hidden=true;S.panelUpd=null;
+  if(held){camera.remove(held.model);held=null}updateHeld();
+  S.pending=null;its.length=0;colliders.length=0;conns.length=0;S.focus=null;
+  while(W.children.length){const o=W.children[0];W.remove(o);disposeObj(o)}
+  setLevels(0,0,0);M.wp=null;M.tasks=[];M.timer=null;setTimer(null);
+  ['#det','#suit','#note'].forEach(s=>$(s).hidden=true);$('#helpX').textContent='';
+  P.mode='walk';P.vx=P.vz=P.vy=0;camera.fov=72;camera.updateProjectionMatrix();rb.visible=false;
+}
+function startMission(i){
+  auInit();clearMission();S.idx=i;S.mission=MISSIONS[i];S.errors=0;S.state='play';S.t0=S.time;S.hintOff=false;
+  $('#menu').hidden=true;$('#end').hidden=true;$('#hud').hidden=false;$('#mtitle').textContent=S.mission.tag+' · '+S.mission.title;
+  env(1.3,.32);P.yaw=0;P.pitch=0;P.ground=true;P.stride=0;
+  S.mission.start();updateHint();lock();
+}
+function toMenu(){clearMission();S.state='menu';S.mission=null;S.idx=-1;$('#hud').hidden=true;$('#end').hidden=true;$('#menu').hidden=false;if(document.exitPointerLock)document.exitPointerLock();buildTerrain([{x:0,z:0,r:20,h:0}],[],5);env(1.3,.32);updateHint()}
+function finish(ok,title,msg,extra=[]){
+  if(S.state!=='play')return;S.state='end';closePanel();if(document.exitPointerLock)document.exitPointerLock();setLevels(0,ok?0:0,0);ok?sfx.win():sfx.lose();
+  const e=$('#end');e.className='screen '+(ok?'win':'lose');e.hidden=false;$('#endT').textContent=title;$('#endM').innerHTML=msg;
+  const stars=!ok?0:S.errors<=3?3:S.errors<=8?2:1;
+  const rows=[['Time on task',mmss(S.time-S.t0)],['Mistakes made',S.errors],['Rating',ok?'★'.repeat(stars)+'☆'.repeat(3-stars):'Mission failed'],...extra];
+  $('#endS').innerHTML=rows.map(r=>`<span>${r[0]}</span><b>${r[1]}</b>`).join('');
+  const b=$('#endB');b.innerHTML='';
+  if(ok&&S.idx<MISSIONS.length-1)b.append(mkBtn('Next mission',()=>startMission(S.idx+1),'big'));
+  b.append(mkBtn(ok?'Replay':'Try again',()=>startMission(S.idx),'big'),mkBtn('Mission select',toMenu,'big'));
+  $('#hud').hidden=true;
+}
+function lock(){if(S.state!=='play'||S.modal)return;try{const r=canvas.requestPointerLock&&canvas.requestPointerLock();if(r&&r.catch)r.catch(()=>{S.drag=true;updateHint()})}catch(e){S.drag=true}}
+document.addEventListener('pointerlockchange',()=>{S.locked=document.pointerLockElement===canvas;updateHint()});
+document.addEventListener('pointerlockerror',()=>{S.drag=true;updateHint()});
+canvas.addEventListener('mousedown',()=>{S.md=true;if(S.state==='play'&&!S.locked&&!S.modal)lock()});
+addEventListener('mouseup',()=>{S.md=false});
+addEventListener('mousemove',e=>{if(S.state!=='play'||S.modal)return;if(S.locked||S.md){P.yaw-=(e.movementX||0)*.0023;P.pitch=clamp(P.pitch-(e.movementY||0)*.0023,-1.45,1.45)}});
+addEventListener('keydown',e=>{
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))e.preventDefault();
+  K[e.code]=true;if(e.repeat||S.state!=='play')return;
+  if(S.modal){if(e.code==='Escape'||e.code==='KeyE')closePanel();return}
+  if(e.code==='KeyE')interact();else if(e.code==='KeyG')dropOrCancel();else if(e.code==='KeyQ')cancelPending();
+  else if(S.mission&&S.mission.onKey)S.mission.onKey(e.code);
+});
+addEventListener('keyup',e=>{K[e.code]=false});
+addEventListener('blur',()=>{for(const k in K)K[k]=false});
+
+/* ================= shared builders ================= */
+const rooms=[];
+function room(o){
+  const {x,z,w,d,h}=o,t=.3,dw=o.doorW||2.8,wc=o.wall||0xb9c0c8;rooms.push(o);
+  const m=mat(wc,{roughness:.8,metalness:.1});
+  const part=(cx,cz,ww,dd,y0=0,y1=h)=>{const b=new THREE.Mesh(new THREE.BoxGeometry(ww,y1-y0,dd),m);b.position.set(cx,(y0+y1)/2+.05,cz);W.add(b);if(y0===0)addBox(cx,cz,ww,dd,-5,h)};
+  const sides={n:[x,z-d/2,w,t,true],s:[x,z+d/2,w,t,true],w:[x-w/2,z,t,d,false],e:[x+w/2,z,t,d,false]};
+  for(const k in sides){const [cx,cz,ww,dd,horiz]=sides[k];
+    if(o.door&&o.door.includes(k)){const len=horiz?ww:dd,seg=(len-dw)/2;
+      if(horiz){part(cx-(dw+seg)/2,cz,seg,dd);part(cx+(dw+seg)/2,cz,seg,dd);part(cx,cz,dw,dd,2.6,h)}
+      else{part(cx,cz-(dw+seg)/2,ww,seg);part(cx,cz+(dw+seg)/2,ww,seg);part(cx,cz,ww,dw,2.6,h)}
+    }else part(cx,cz,ww,dd)}
+  const fl=new THREE.Mesh(new THREE.BoxGeometry(w,.12,d),mat(o.floor||0x59626d,{roughness:.9}));fl.position.set(x,.06,z);W.add(fl);
+  if(!o.noRoof){const rf=new THREE.Mesh(new THREE.BoxGeometry(w+.4,.3,d+.4),mat(0x9aa3ad));rf.position.set(x,h+.15,z);W.add(rf)}
+  const n=Math.max(1,Math.round(w/8));for(let i=0;i<n;i++){const l=new THREE.PointLight(0xfff2dc,.9,Math.max(w,d)*1.1,1.2);l.position.set(x-w/2+w*(i+.5)/n,h-.7,z);W.add(l);const p=box(1.6,.06,.5,0xffffff,x-w/2+w*(i+.5)/n,h-.05,z);p.material=new THREE.MeshBasicMaterial({color:0xfff6e0});W.add(p)}
+  return o;
+}
+function roomEnv(){let inn=rooms.some(r=>Math.abs(P.pos.x-r.x)<r.w/2&&Math.abs(P.pos.z-r.z)<r.d/2);if(P.mode==='rover'&&M.roverIn!==undefined)inn=false;env(lerp(sun.intensity,inn?.25:1.3,.12),lerp(amb.intensity,inn?.85:.32,.12))}
+function spawn(eq,x,z){eq.model.position.set(x,heightAt(x,z),z);eq.model.rotation.y=Math.random()*6;W.add(eq.model);return eq}
+function fixedEquip(type,label,model,o={}){const eq=Object.assign({type,label,model,state:'installed',ports:[]},o);model.userData.eq=eq;return eq}
+function sign(text,x,y,z,ry=0,color='#6ff0ff'){const s=tag(text,0,color);s.position.set(x,y,z);W.add(s);return s}
+function post(x,z,hh,c){const g=cyl(.05,.05,hh,c,x,heightAt(x,z)+hh/2,z,8);W.add(g);return g}
+function hist(canvas){const h2={a:[],b:[]};return{push(a,b){h2.a.push(a);h2.b.push(b);if(h2.a.length>120){h2.a.shift();h2.b.shift()}},draw(maxv,ca='#7affc9',cb='#ffb02e'){const x=canvas.getContext('2d'),w=canvas.width,hh=canvas.height;x.clearRect(0,0,w,hh);x.strokeStyle='#17343a';for(let i=1;i<4;i++){x.beginPath();x.moveTo(0,hh*i/4);x.lineTo(w,hh*i/4);x.stroke()}[[h2.a,ca],[h2.b,cb]].forEach(([arr,c])=>{x.strokeStyle=c;x.lineWidth=2;x.beginPath();arr.forEach((v,i)=>{const px=i/119*w,py=hh-4-clamp(v/maxv,0,1)*(hh-8);i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()})}}}
+function gridTex(c1,c2,nx=6,ny=4){const c=document.createElement('canvas');c.width=256;c.height=160;const x=c.getContext('2d');x.fillStyle=c1;x.fillRect(0,0,256,160);x.strokeStyle=c2;x.lineWidth=2;for(let i=0;i<=nx;i++){x.beginPath();x.moveTo(i*256/nx,0);x.lineTo(i*256/nx,160);x.stroke()}for(let j=0;j<=ny;j++){x.beginPath();x.moveTo(0,j*160/ny);x.lineTo(256,j*160/ny);x.stroke()}return new THREE.CanvasTexture(c)}
+function allPortsOf(list){return()=>list.flatMap(e=>e.ports)}
+function habitatShell(x,z,rot=0){ // simple habitat module
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rot;
+  const body=cyl(3.4,3.4,13,0xd7dbe0,0,3.4,0,28);body.rotation.z=Math.PI/2;g.add(body);
+  for(const dx of[-6.6,6.6]){const c=sph(3.4,0xd7dbe0,dx,3.4,0);c.scale.set(.35,1,1);g.add(c)}
+  g.add(box(14,.3,6,0x6d757d,0,.15,0));
+  const win=box(.1,.9,1.6,0x2a4a7a,-5,3.8,3.35);win.material=glow(0x4a8aff);win.material.emissiveIntensity=.5;g.add(win);
+  const win2=win.clone();win2.position.x=5;g.add(win2);
+  g.add(box(1.5,2.4,.3,0x40474f,0,1.3,3.35));
+  W.add(g);return g;
+}
+
+/* ================= p4: helpers ================= */
+function world(zs,bs,seed,x,z,yaw=0){rooms.length=0;buildTerrain(zs,bs,seed);P.pos.set(x,heightAt(x,z),z);P.yaw=yaw;P.pitch=0;P.vx=P.vz=P.vy=0}
+const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
+function unit(w,hh,d,c,o={}){const g=new THREE.Group();g.add(o.cyl?cyl(w/2,w/2,hh,c,0,hh/2,0,20):box(w,hh,d,c,0,hh/2,0));
+  const l=lamp(0x222222,0,hh+.12,0,.09);g.add(l);g.userData.lamp=l;g.userData.dim=[w,hh];
+  if(o.rot){const r=box(w*.7,.07,.12,0xe0e0e0,0,hh*.55,(o.cyl?w/2:d/2)+.04);g.add(r);g.userData.rot=r}return g}
+function consume(eq){camera.remove(eq.model);held=null;updateHeld();remIt(eq.it);disposeObj(eq.model)}
+function mkSw(st,lab,key,gate){const bt=mkBtn('OFF',()=>{if(!st[key]){const e=gate&&gate();if(e){say(e,'err');return}}st[key]=st[key]?0:1;sfx.valve()},'sw');
+  return{bt,row:mkRow(lab,bt),upd(){bt.dataset.on=st[key]?1:0;bt.textContent=st[key]?'ON':'OFF'}}}
+function terminal(title,x,z,ry,build,y=.12){const g=grp(box(1.3,1,.5,0x2b333d,0,.5,0),box(1.2,.5,.08,0x0a2a30,0,1.15,0));
+  const sc=g.children[1];sc.material=glow(0x2de0c8);sc.material.emissiveIntensity=.6;sc.rotation.x=-.35;g.position.set(x,y,z);g.rotation.y=ry;W.add(g);addBox(x,z,1.4,.7,-5,2);
+  addIt(g,{range:4,prompt:()=>'Open '+title,use:()=>openPanel(title,build)});g.add(tag(title,2.1,'#6ff0ff'));return g}
+const sec=t=>h('div',{class:'sec',textContent:t});
+const solarM=()=>{const g=grp(cyl(.07,.1,1,0x888888,0,.5,0,8));const p=box(3,.08,1.7,0x1d3d8a,0,1.1,0);p.rotation.x=-.45;g.add(p);g.userData.dim=[3,1.1];return g};
+
+/* ================= plant(): generic install-and-connect mission ================= */
+function plant(c){
+  const PT={},slots=[],insts=[];let fin=false;
+  const inst=k=>insts.filter(e=>e.k===k);
+  const isIn=k=>{const l=inst(k);return l.length>0&&l.every(e=>e.state==='installed')};
+  const linked=(a,b)=>{const p=PT[a],q=PT[b];return!!(p&&q&&p.conn&&(p.conn.a===q||p.conn.b===q))};
+  const findL=(a,b)=>c.links.find(l=>{const p=PT[l[0]],q=PT[l[1]];return(p===a&&q===b)||(p===b&&q===a)});
+  const m={tag:c.tag,title:c.title,blurb:c.blurb,meta:c.meta,slots,PT,insts,isIn,linked,inst,allLinked:()=>c.links.every(l=>linked(l[0],l[1])),allPorts:()=>Object.values(PT),
+  start(){
+    fin=false;insts.length=0;slots.length=0;for(const k in PT)delete PT[k];
+    c.begin(m);
+    for(const s of c.items){const n=s.n||1;
+      for(let i=0;i<n;i++){
+        const ik=n>1?s.k+i:s.k,label=s.names?s.names[i]:s.label,type=(n>1&&!s.any)?s.type+i:s.type,model=s.build(i);
+        const eq=s.fixed?fixedEquip(type,label,model,{k:s.k,ik}):makeEquip(type,label,model,{k:s.k,ik,holdScale:s.hs||.45,tagY:s.tagY||2.3});
+        insts.push(eq);const [w,hh]=model.userData.dim;
+        if(s.fixed){model.position.set(s.fixed[0],s.y||0,s.fixed[1]);model.rotation.y=s.rot||0;W.add(model);addBox(s.fixed[0],s.fixed[1],w+.1,.9,-5,hh)}
+        else spawn(eq,s.at[0]+(s.dx||0)*i,s.at[1]+(s.dz||0)*i);
+        const cn={l:0,r:0};
+        for(const [id,kind,role,pl] of s.ports){const left=role==='dst',j=cn[left?'l':'r']++;
+          PT[ik+'.'+id]=makePort(eq,{id,kind,role,label:label+' › '+pl,x:(left?-1:1)*(w/2+.1),y:Math.min(hh-.15,.4+.42*j),z:0,enabled:!!s.fixed})}
+        if(!s.fixed){eq.onInstall=sl=>{eq.sl=sl;c.onInst&&c.onInst(eq,sl)};if(s.nocol)eq.colBox=false;
+          const sl=(n>1&&!s.any)?[s.slots[i]]:(i===0?s.slots:[]);
+          for(const q of sl)slots.push(makeSlot({pos:V3(q.p[0],q.y||s.sy||0,q.p[1]),rotY:q.rot||0,label:q.label||label+' mount',accepts:type,size:s.size||[w+.3,hh,1.2],hint:s.hint,f:q.f,msg:q.msg,best:q.best,filter:(hd,sg)=>sg.msg||null}))}
+      }}
+    c.setup(m);
+    setTasks(c.tasks.map(t=>({...t,chk:()=>(t.need||[]).every(isIn)&&(t.link||[]).every(l=>linked(l[0],l[1]))&&(!t.ok||t.ok())})));
+    c.start&&c.start(m);
+  },
+  rules(a,b){if(findL(a,b))return null;
+    const ps=c.links.filter(l=>PT[l[0]]===a||PT[l[1]]===a).map(l=>PT[l[0]]===a?PT[l[1]]:PT[l[0]]);
+    return'Wrong connection: '+a.label+' does not go to '+b.label+'.'+(ps.length?' It connects to: '+ps.map(p=>p.label).join(' or ')+'.':'')},
+  onConnect(){for(const k of conns){const L=findL(k.a,k.b);if(L)k.on=L[2]||(()=>false)}},
+  update(dt){
+    roomEnv();c.sim(dt,m);
+    for(const e of insts){const u=e.model.userData;if(u.lamp)setLamp(u.lamp,0x4ade80,!!e.act);if(u.rot&&e.act)u.rot.rotation.z+=dt*7}
+    const t=cur();slots.forEach(s=>s.pulse=false);for(const k in PT)PT[k].pulse=false;
+    if(t){let tg=null,lb='';
+      for(const k of t.need||[]){if(!inst(k).find(e=>e.state!=='installed'))continue;
+        if(held&&held.k===k){const ok=slots.filter(s=>!s.eq&&s.accepts===held.type&&!s.msg),bs=ok.filter(s=>s.best);(bs.length?bs:ok).forEach(s=>s.pulse=true);if(ok[0]){tg=(bs[0]||ok[0]).pos;lb='Mount here'}}
+        else{const lo=inst(k).find(e=>e.state==='loose');if(lo){tg=lo.model.position;lb='Pick up '+lo.label}}
+        if(tg)break}
+      if(!tg)for(const l of t.link||[]){if(!linked(l[0],l[1])){const p=PT[l[0]],q=PT[l[1]];if(p&&q&&p.enabled&&q.enabled){p.pulse=q.pulse=true;tg=wpos(p.g);lb='Connect cable';break}}}
+      if(!tg&&t.at){tg=t.at()}
+      way(tg,t.lb||lb||'Objective');
+      if(t.chk())done(t.id);
+    }else if(!fin){fin=true;way(null);later(1800,()=>c.win(m))}
+  },
+  hud(){c.hud&&c.hud(m)}};
+  return m;
+}
+
+/* ================= MISSION 1: power ================= */
+let s1,posts1=[];const CON1=V3(-6,1.5,-9.4),msgA='Site A lies in the shadow of the ridge: only about 25% sunlight. Panels here would barely generate. Choose a brighter site.';
+const m1=plant({tag:'MISSION 1',title:'Lunar power generation',blurb:'Survey the site, raise solar arrays, wire batteries, converter and distribution unit, run the safety checks, then power the habitat.',meta:'8 tasks · outdoors + habitat',
+  begin(){s1={sv:new Set(),cc:0,gf:0,sol:0,bat:0,feed:0,night:0,bp:20,gen:0,load:0,sup:0,lok:0,bk:0,bo:0,nt:0,nb:0,peak:0};
+    world([{x:0,z:0,r:18,h:0},{x:-32,z:18,r:8,h:0},{x:8,z:40,r:8,h:0},{x:32,z:16,r:8,h:0},{x:-14,z:14,r:6,h:0}],[{x:-22,z:22,r:7,h:12}],21,0,9,0)},
+  items:[
+    {k:'solar',n:2,any:1,type:'solar',label:'Solar panel',build:solarM,hs:.3,at:[-16,12],dz:2.8,ports:[['out','dc','src','DC output']],size:[3.2,1.4,1.8],
+      slots:[{p:[-32,16],f:.25,msg:msgA,label:'Site A mount'},{p:[-32,20],f:.25,msg:msgA,label:'Site A mount'},{p:[8,38],f:.7,label:'Site B mount'},{p:[8,42],f:.7,label:'Site B mount'},{p:[32,14],f:1,best:1,label:'Site C mount'},{p:[32,18],f:1,best:1,label:'Site C mount'}]},
+    {k:'batt',n:2,any:1,type:'batt',label:'Battery bank',build:()=>unit(1.4,1.1,1,0x2f7a4a),at:[-16,17],dx:2.2,ports:[['io','dc','bi','DC port']],slots:[{p:[12,-.5],label:'Battery pad 1'},{p:[15,-.5],label:'Battery pad 2'}]},
+    {k:'conv',type:'conv',label:'Power converter (DC→AC)',build:()=>unit(2,1.7,1,0x9a6a2a,{rot:1}),at:[-10,17],ports:[['pv0','dc','dst','PV input 1'],['pv1','dc','dst','PV input 2'],['out','ac','src','AC output'],['b0','dc','bi','Battery port 1'],['b1','dc','bi','Battery port 2']],slots:[{p:[14,-6],label:'Converter pad'}]},
+    {k:'pdu',type:'pdu',label:'Power distribution unit',build:()=>unit(1.1,2,.7,0x4a52a0,{rot:1}),at:[-10,12],ports:[['in','ac','dst','AC input'],['out','ac','src','AC output']],slots:[{p:[-3,-8.6],y:.12,label:'PDU bay (inside habitat)'}],size:[1.3,2,.9]},
+    {k:'bus',fixed:[3.2,-9.4],y:.12,type:'bus',label:'Habitat electrical bus',build:()=>unit(1.2,2.1,.5,0x3a3f46),ports:[['in','ac','dst','AC input']]}],
+  links:[['solar0.out','conv.pv0',()=>s1.gen>0],['solar1.out','conv.pv1',()=>s1.gen>0],['batt0.io','conv.b0',()=>s1.bat&&(s1.gen>0||s1.night)],['batt1.io','conv.b1',()=>s1.bat&&(s1.gen>0||s1.night)],['conv.out','pdu.in',()=>s1.sup],['pdu.out','bus.in',()=>s1.sup]],
+  tasks:[
+    {id:'t1',text:'Survey the lunar site',hint:'Read survey posts A, B and C (E). Sunlight and terrain decide where panels should go.',ok:()=>s1.sv.size>=3,at:()=>(posts1.find(p=>!s1.sv.has(p.id))||posts1[0]).pos,lb:'Survey post'},
+    {id:'t2',text:'Deploy the solar panels',hint:'Grab a panel (E), carry it to a glowing mount on a sunlit site, E to install. Brighter site = more kW.',need:['solar']},
+    {id:'t3',text:'Install battery storage',hint:'Place both battery banks on the pads beside the habitat.',need:['batt']},
+    {id:'t4',text:'Install the power converter',hint:'Place the converter on its pad east of the habitat.',need:['conv']},
+    {id:'t5',text:'Connect panels and batteries to the converter',hint:'Look at a glowing port, E to pick up a cable, E on the matching port. Panels → PV inputs, batteries → battery ports.',link:[['solar0.out','conv.pv0'],['solar1.out','conv.pv1'],['batt0.io','conv.b0'],['batt1.io','conv.b1']]},
+    {id:'t6',text:'Install the distribution unit, wire it to the habitat',hint:'Put the PDU in its bay inside the habitat, then run converter → PDU → habitat bus.',need:['pdu'],link:[['conv.out','pdu.in'],['pdu.out','bus.in']]},
+    {id:'t7',text:'Run safety checks, activate solar generation',hint:'Control panel inside (west wall): run both tests, then close the solar breaker.',ok:()=>s1.sol&&s1.gen>0,at:()=>CON1,lb:'Control panel'},
+    {id:'t8',text:'Test the power system',hint:'Close battery + habitat breakers, run the load test, then simulate an eclipse to prove battery backup.',ok:()=>s1.lok&&s1.bk,at:()=>CON1,lb:'Control panel'}],
+  setup(m){
+    room({x:0,z:-6,w:16,d:8,h:3.8,door:'s'});
+    terminal('Power control panel',-6,-9.4,0,p1Panel);
+    sign('SUPPLY DEPOT',-14,3.2,14);sign('POWER PAD',14,3.4,-3);
+    posts1=[['A',-32,18,'Site A'],['B',8,40,'Site B'],['C',32,16,'Site C']].map(([id,x,z,nm])=>{
+      const g=grp(cyl(.08,.08,2.4,0xffc400,0,1.2,0,8),box(.7,.5,.1,0x222222,0,2.3,0));g.position.set(x,heightAt(x,z),z);g.add(tag('SURVEY '+id,3.2,'#ffb02e'));W.add(g);
+      const info={A:'Site A: sunlight 25% (ridge shadow to the east of the site), slope 2°. Poor.',B:'Site B: sunlight 70%, 12° slope tilted away from the Sun. Usable but weak.',C:'Site C: sunlight 100%, flat and open towards the Sun. Best site.'}[id];
+      addIt(g,{range:5,prompt:()=>'Survey '+nm,use:()=>{s1.sv.add(id);sfx.ok();say(info,'info');note('<b>'+nm+'</b><br>'+info.split(': ')[1]+'<br>Surveyed '+s1.sv.size+'/3',10000)}});
+      return{id,pos:V3(x,2,z)}});
+    dashInit('Power dashboard',[{k:'gen',l:'Solar generation',max:12},{k:'load',l:'Habitat load',max:12},{k:'bat',l:'Battery charge'},{k:'bus',l:'Habitat supply'}]);
+    $('#helpX').textContent='Cable: look at a glowing port, E to grab the cable, then E on the matching port.';
+    note('<b>Brief:</b> the habitat is built but dead. Fetch equipment from the <b>supply depot</b> (west), survey sites, then wire everything.',12000)},
+  sim(dt,m){
+    const lk=m.linked;let gen=0,nb=0;
+    for(let i=0;i<2;i++){const p=m.PT['solar'+i+'.out'];if(p&&p.eq.sl&&lk('solar'+i+'.out','conv.pv'+i))gen+=5*p.eq.sl.f;if(lk('batt'+i+'.io','conv.b'+i))nb++}
+    const chain=lk('conv.out','pdu.in')&&lk('pdu.out','bus.in');
+    s1.gen=s1.sol&&!s1.night?gen:0;s1.load=s1.feed&&chain?6:0;s1.nb=nb;
+    const sup=s1.load>0&&(s1.gen>=s1.load||(s1.bat&&nb>0&&s1.bp>0));s1.sup=sup?1:0;
+    if(s1.bat&&nb>0)s1.bp=clamp(s1.bp+(s1.gen-s1.load)*dt*(s1.gen>s1.load?.7:.35),0,100);
+    s1.peak=Math.max(s1.peak,s1.gen);
+    if(s1.night&&sup)s1.nt+=dt;else if(!s1.night)s1.nt=0;if(s1.nt>=4)s1.bk=1;
+    if(s1.load>0&&!sup){s1.bo+=dt;if(s1.bo>12)finish(false,'Habitat blackout','The habitat lost power for too long. Life support went cold. Keep generation above the 6 kW load or keep the batteries charged.')}else s1.bo=Math.max(0,s1.bo-dt);
+    m.insts.forEach(e=>e.act=e.k==='solar'?s1.gen>0:e.k==='batt'?(s1.bat&&nb>0):e.k==='conv'||e.k==='pdu'||e.k==='bus'?s1.sup:0);
+    setLevels(s1.sup?.6:s1.gen>0?.3:0,s1.bo>5?1:0,0)},
+  hud(){dash('gen',s1.gen,fmt(s1.gen)+' kW',s1.gen>0?'ok':'');dash('load',s1.load,fmt(s1.load)+' kW','');dash('bat',s1.bp,Math.round(s1.bp)+' %',s1.bp<15?'bad':s1.bp<35?'warn':'ok');dash('bus',s1.sup?100:0,s1.sup?'POWERED':'NO POWER',s1.sup?'ok':'bad')},
+  win(){finish(true,'Habitat powered','Solar arrays, batteries, converter and distribution unit are installed and tested. The habitat has stable power and battery backup for the lunar night (about 14 Earth days of darkness).',[['Peak generation',fmt(s1.peak)+' kW'],['Battery',Math.round(s1.bp)+' %']])}
+});
+function p1Panel(b){
+  const m=m1,s=s1,lcc=mkLamp(),lgf=mkLamp(),ll=mkLamp(),lb=mkLamp(),scr=h('div',{class:'scr'}),cv=h('canvas',{class:'gr',width:560,height:110}),H=hist(cv);let n=0;
+  const safe=()=>s.cc&&s.gf?null:'Safety first: run the continuity and ground-fault tests before closing any breaker.';
+  const test=(key,lamp,nm)=>mkRow(nm,lamp,mkBtn('Run',()=>{if(!m.allLinked()||!m.isIn('pdu')){say('Test FAILED: open circuit. Not every cable or unit in the system is installed and connected.','err');return}s[key]=1;say(nm+': PASS','ok')}));
+  const S1=mkSw(s,'Solar array breaker','sol',safe),
+    S2=mkSw(s,'Battery breaker','bat',()=>safe()||(!s.sol?'Close the solar breaker first so the batteries charge from the Sun.':s.nb<1?'No battery is wired to the converter.':null)),
+    S3=mkSw(s,'Habitat feed breaker','feed',()=>safe()||(!s.sol?'Close the solar breaker first.':!m.linked('conv.out','pdu.in')||!m.linked('pdu.out','bus.in')?'The PDU is not connected between converter and habitat bus.':null));
+  const ecl=mkBtn('Eclipse: OFF',()=>{if(!s.night){if(!s.bat||s.nb<1){say('Close the battery breaker first: the batteries must carry the habitat in an eclipse.','err');return}if(s.bp<30){say('Battery only '+Math.round(s.bp)+'%. Let it charge above 30% before the test.','err');return}}s.night=s.night?0:1});
+  b.append(sec('1 · Safety checks'),test('cc',lcc,'Cable continuity test'),test('gf',lgf,'Ground-fault test'),sec('2 · Breakers (in order)'),S1.row,S2.row,S3.row,sec('3 · System tests'),
+    mkRow('Habitat load test (needs 6 kW)',ll,mkBtn('Run',()=>{if(!s.feed){say('Close the habitat feed breaker first.','err');return}if(s.gen<6){say('Load test FAILED: array makes '+fmt(s.gen)+' kW, habitat needs 6 kW. Sunlit sites yield more.','err');return}s.lok=1;say('Load test PASSED: stable supply','ok')})),
+    mkRow('Battery backup (hold 4 s in eclipse)',lb,ecl),scr,cv);
+  return()=>{lampSet(lcc,s.cc?'on':'');lampSet(lgf,s.gf?'on':'');lampSet(ll,s.lok?'on':'');lampSet(lb,s.bk?'on':'');[S1,S2,S3].forEach(x=>x.upd());ecl.textContent='Eclipse: '+(s.night?'ON':'OFF');
+    scr.textContent='Generation '+fmt(s.gen)+' kW   Load '+fmt(s.load)+' kW\nBattery    '+Math.round(s.bp)+' %   Supply '+(s.sup?'STABLE':'NONE')+'\nGreen = generation, amber = load';if(++n%2==0)H.push(s.gen,s.load);H.draw(12)}}
+
+/* ================= MISSION 2: life support ================= */
+let s2;const CON2=V3(8,1.5,-2.7);
+const m2=plant({tag:'MISSION 2',title:'Life support setup',blurb:'Plumb the water loop, run electrolysis, scrub CO₂ into a Sabatier reactor, duct the air and bring the cabin to breathable conditions for four astronauts.',meta:'12 tasks · pipes, valves, ducts',
+  begin(){s2={pur:0,qOk:0,el:0,scr:0,sab:0,fan:0,env:0,valve:0,wq:55,wt:60,o2s:0,O2:16.5,CO2:3000,P:84,T:14,RH:72,vOk:0};world([{x:0,z:0,r:20,h:0},{x:-14,z:14,r:7,h:0}],[],33,0,7,0)},
+  items:[
+    {k:'tank',type:'tank',label:'Water tank',build:()=>unit(1.1,1.8,1.1,0x3d6fd1,{cyl:1}),at:[-17,12],ports:[['out','water','src','Outlet']],slots:[{p:[-10,-12.5],y:.12}]},
+    {k:'pur',type:'pur',label:'Water purification unit',build:()=>unit(1.5,1.6,.9,0x3f8f78,{rot:1}),at:[-15,12],ports:[['in','water','dst','Inlet'],['rec','water','dst','Recovered-water inlet'],['out','water','src','Clean outlet']],slots:[{p:[-6.5,-12.5],y:.12}]},
+    {k:'el',type:'el',label:'Electrolysis unit',build:()=>unit(1.7,1.9,1,0x8b909c,{rot:1}),at:[-13,12],ports:[['in','water','dst','Water inlet'],['pwr','dc','dst','Power input'],['o2','o2','src','O₂ outlet'],['h2','h2','src','H₂ outlet']],slots:[{p:[-3,-12.5],y:.12}]},
+    {k:'o2t',type:'o2t',label:'O₂ storage tank',build:()=>unit(1,2.1,1,0x6fd6ee,{cyl:1}),at:[-17,16],ports:[['in','o2','dst','Inlet']],slots:[{p:[.8,-12.5],y:.12}]},
+    {k:'scr',type:'scr',label:'CO₂ scrubber',build:()=>unit(1.7,1.9,1,0x806a52,{rot:1}),at:[-15,16],ports:[['co2','co2','src','CO₂ outlet'],['air','air','src','Cleaned-air duct']],slots:[{p:[4.5,-12.5],y:.12}]},
+    {k:'sab',type:'sab',label:'Sabatier reactor',build:()=>unit(1.3,2.1,1.1,0xb25a2a,{cyl:1}),at:[-13,16],ports:[['co2','co2','dst','CO₂ inlet'],['h2','h2','dst','H₂ inlet'],['wat','water','src','Water outlet']],slots:[{p:[8,-12.5],y:.12}]},
+    {k:'fan',type:'fan',label:'Ventilation fan',build:()=>unit(1.2,1.2,.6,0xaab7c8,{rot:1}),at:[-11,14],ports:[['in','air','dst','Duct inlet'],['out','air','src','Duct outlet']],slots:[{p:[9.8,-8],y:.12}]},
+    {k:'sens',n:5,names:['O₂ sensor','CO₂ sensor','Pressure sensor','Temperature sensor','Humidity sensor'],type:'sens',nocol:1,build:()=>unit(.4,.4,.2,0xe8e8e8),hs:1,tagY:.9,at:[-9,18],dx:1.1,ports:[],size:[.6,.5,.4],
+      slots:[{p:[-9,-2.5],y:1.5},{p:[-6,-2.5],y:1.5},{p:[-3,-2.5],y:1.5},{p:[3,-2.5],y:1.5},{p:[11.6,-4],y:1.5}]},
+    {k:'pwr',fixed:[-11.5,-9],y:.12,type:'pwr',label:'Habitat power bus',build:()=>unit(.5,2,1.1,0x3a3f46),ports:[['out','dc','src','DC supply']]},
+    {k:'vent',fixed:[11.5,-11],y:.12,type:'vent',label:'Habitat air vent',build:()=>unit(.4,1.4,1.4,0xaab7c8),ports:[['in','air','dst','Inlet']]}],
+  links:[['tank.out','pur.in',()=>s2.pur],['pur.out','el.in',()=>s2.pur&&s2.qOk],['pwr.out','el.pwr',()=>s2.el],['el.o2','o2t.in',()=>s2.el&&s2.valve],['el.h2','sab.h2',()=>s2.el&&s2.sab],['scr.co2','sab.co2',()=>s2.scr],['sab.wat','pur.rec',()=>s2.sab&&s2.scr],['scr.air','fan.in',()=>s2.scr&&s2.fan],['fan.out','vent.in',()=>s2.fan]],
+  tasks:[
+    {id:'t1',text:'Collect and place the water tank',hint:'Supply depot is west of the airlock. Carry the tank to its glowing mount along the north wall.',need:['tank']},
+    {id:'t2',text:'Install the purification unit, connect it to the tank',hint:'Place the purifier, then pipe tank outlet → purifier inlet (water ports).',need:['pur'],link:[['tank.out','pur.in']]},
+    {id:'t3',text:'Install the electrolysis unit and its water inlet',hint:'Pipe purifier clean outlet → electrolyzer water inlet.',need:['el'],link:[['pur.out','el.in']]},
+    {id:'t4',text:'Connect electrical supply to electrolysis',hint:'Cable from the habitat power bus (west wall) to the electrolyzer power input.',link:[['pwr.out','el.pwr']]},
+    {id:'t5',text:'Install O₂ tank and connect the oxygen line',hint:'Place the O₂ tank and pipe electrolyzer O₂ outlet → tank inlet.',need:['o2t'],link:[['el.o2','o2t.in']]},
+    {id:'t6',text:'Activate oxygen generation',hint:'Console: start purifier → verify water quality → open the O₂ valve by the tank (E) → start electrolysis.',ok:()=>s2.el&&s2.valve,at:()=>CON2,lb:'Life-support console'},
+    {id:'t7',text:'Install the CO₂ scrubber',hint:'Place the scrubber on its mount. Crew has arrived: CO₂ is rising!',need:['scr']},
+    {id:'t8',text:'Install the Sabatier reactor and connect it',hint:'H₂ from electrolyzer, CO₂ from scrubber, and its recovered water back to the purifier recovered-water inlet.',need:['sab'],link:[['el.h2','sab.h2'],['scr.co2','sab.co2'],['sab.wat','pur.rec']]},
+    {id:'t9',text:'Install fan and connect the air ducts',hint:'Duct scrubber cleaned-air → fan inlet, fan outlet → habitat vent (east wall).',need:['fan'],link:[['scr.air','fan.in'],['fan.out','vent.in']]},
+    {id:'t10',text:'Install the five environmental sensors',hint:'Carry each sensor to its wall mount (O₂, CO₂, pressure, temperature, humidity).',need:['sens']},
+    {id:'t11',text:'Activate the life-support system',hint:'Console: scrubber, Sabatier, fans, then environmental control.',ok:()=>s2.scr&&s2.sab&&s2.fan&&s2.env,at:()=>CON2,lb:'Life-support console'},
+    {id:'t12',text:'Test the habitat atmosphere',hint:'Wait for readings to settle, then press “Atmosphere check” on the console.',ok:()=>s2.vOk,at:()=>CON2,lb:'Life-support console'}],
+  setup(m){
+    room({x:0,z:-8,w:24,d:12,h:3.8,door:'s'});terminal('Life-support console',8,-2.7,0,p2Panel);
+    sign('SUPPLY DEPOT',-14,3.2,14);
+    const vl=lamp(0x222222,0,1.5,0,.1),vg=grp(cyl(.12,.12,1.2,0x888888,0,.6,0,8),cyl(.3,.3,.06,0xcc3333,0,1.2,0,12),vl);vg.position.set(2.6,.12,-11.4);W.add(vg);vg.add(tag('O₂ feed valve',2.1,'#6ff0ff'));m.vl=vl;
+    addIt(vg,{range:4.5,prompt:()=>s2.valve?'Close O₂ feed valve':'Open O₂ feed valve',use:()=>{s2.valve=s2.valve?0:1;sfx.valve();say('O₂ feed valve '+(s2.valve?'OPEN':'CLOSED'),'info')}});
+    dashInit('Life-support dashboard',[{k:'o2',l:'Oxygen (cabin)',min:10,max:25},{k:'co2',l:'CO₂',max:6000},{k:'pr',l:'Cabin pressure',min:70,max:110},{k:'tp',l:'Temperature',min:5,max:35},{k:'rh',l:'Humidity'},{k:'wt',l:'Water reserve'},{k:'o2s',l:'O₂ storage'}]);
+    $('#helpX').textContent='Pipes/ducts/cables all use ports: E on a glowing port, then E on its partner. Valves: E.';
+    note('<b>Brief:</b> the habitat has power. Build the water → O₂ → CO₂ → air loop for <b>four astronauts</b>. Equipment is at the depot west of the airlock.',12000)},
+  sim(dt,m){
+    const s=s2,L=m.linked;setLamp(m.vl,0x4ade80,!!s.valve);
+    s.wq=s.pur?Math.min(99,s.wq+9*dt):Math.max(55,s.wq-dt);
+    if(s.el){s.wt-=.2*dt;if(s.wt<=0)finish(false,'Electrolyzer ran dry','The water tank emptied while electrolysis was running. Recovering water with the Sabatier reactor keeps the loop closed.');s.O2=Math.min(21.6,s.O2+.32*dt);s.P=Math.min(101.3,s.P+1.2*dt);if(s.valve)s.o2s=Math.min(100,s.o2s+1.6*dt)}
+    if(s.sab&&s.scr&&s.el&&L('sab.wat','pur.rec'))s.wt=Math.min(100,s.wt+.12*dt);
+    if(isDone('t6')){s.CO2+=12*dt;s.O2-=.01*dt}
+    if(s.scr)s.CO2=Math.max(400,s.CO2-(s.sab?120:60)*dt);
+    if(s.fan&&s.env){s.T+=(22-s.T)*Math.min(1,.12*dt);s.RH+=(48-s.RH)*Math.min(1,.12*dt)}
+    if(s.CO2>9000)finish(false,'CO₂ poisoning','Carbon dioxide reached dangerous levels. Install and start the scrubber sooner after the crew arrives.');
+    m.insts.forEach(e=>e.act=!!({pur:s.pur,tank:s.pur,el:s.el,scr:s.scr,sab:s.sab,fan:s.fan,vent:s.fan,o2t:s.el&&s.valve,sens:s.env,pwr:1}[e.k]));
+    setLevels((s.pur+s.el+s.scr+s.sab+s.fan)/6,s.CO2>6000?.7:0,s.pur||s.sab?.6:0)},
+  hud(m){const s=s2,ss=m.inst('sens'),sn=i=>ss[i]&&ss[i].state==='installed',D=(k,i,v,t,ok)=>sn(i)?dash(k,v,t,ok?'ok':'warn'):dash(k,0,'no sensor','');
+    D('o2',0,s.O2,fmt(s.O2)+' %',s.O2>=20&&s.O2<=23);D('co2',1,s.CO2,Math.round(s.CO2)+' ppm',s.CO2<1000);D('pr',2,s.P,fmt(s.P)+' kPa',s.P>=98&&s.P<=104);D('tp',3,s.T,fmt(s.T)+' °C',s.T>=20&&s.T<=24);D('rh',4,s.RH,Math.round(s.RH)+' %',s.RH>=40&&s.RH<=60);
+    dash('wt',s.wt,fmt(s.wt,0)+' L',s.wt<15?'bad':'ok');dash('o2s',s.o2s,Math.round(s.o2s)+' %','')},
+  win(){finish(true,'Habitat ready for four crew','Oxygen, water recycling, CO₂ removal and air circulation are running and the cabin is in the safe operating range.',[['Cabin O₂',fmt(s2.O2)+' %'],['CO₂',Math.round(s2.CO2)+' ppm'],['Water left',fmt(s2.wt,0)+' L']])}
+});
+function p2Panel(b){
+  const m=m2,s=s2,L=m.linked,lq=mkLamp(),la=mkLamp(),mt=mkMeter(),pv=h('span',{class:'pv'}),scr=h('div',{class:'scr'});
+  const SP=mkSw(s,'Water purifier','pur',()=>!m.isIn('tank')||!m.isIn('pur')?'Install the water tank and purifier first.':!L('tank.out','pur.in')?'Connect the tank to the purifier inlet first.':null),
+   SE=mkSw(s,'Electrolysis (O₂ + H₂)','el',()=>!s.pur?'Wrong sequence: start the purifier first. Impure water fouls the electrolyzer membrane.':!s.qOk?'Verify the water quality before electrolysis.':!L('pur.out','el.in')?'Electrolyzer has no water inlet connected.':!L('pwr.out','el.pwr')?'Electrolyzer has no electrical supply.':!L('el.o2','o2t.in')?'The O₂ line to the storage tank is not connected.':!s.valve?'The O₂ feed valve is closed: oxygen has no path to the tank. Open the valve by the tank.':null),
+   SC=mkSw(s,'CO₂ scrubber','scr',()=>!s.el?'Sequence: bring oxygen generation online (task 6) before cabin systems.':!m.isIn('scr')?'Install the CO₂ scrubber first.':!L('scr.co2','sab.co2')?'Scrubber output has nowhere to go: connect its CO₂ line to the Sabatier reactor.':null),
+   SS=mkSw(s,'Sabatier reactor','sab',()=>!s.el?'No hydrogen yet: run electrolysis first.':!L('el.h2','sab.h2')?'Connect the electrolyzer H₂ outlet to the Sabatier.':!L('scr.co2','sab.co2')?'Connect the scrubber CO₂ line to the Sabatier.':!L('sab.wat','pur.rec')?'Route the recovered water to the purifier.':null),
+   SF=mkSw(s,'Circulation fan','fan',()=>!L('scr.air','fan.in')||!L('fan.out','vent.in')?'Ducts incomplete: connect scrubber → fan → habitat vent.':null),
+   SV=mkSw(s,'Environmental control','env',()=>!m.isIn('sens')?'Install all five environmental sensors first.':!s.fan?'Start the fan first so the sensors read mixed air.':null);
+  b.append(sec('1 · Water'),SP.row,mkRow('Water purity',mt,pv,lq,mkBtn('Verify water quality',()=>{if(!s.pur){say('Start the purifier before testing quality.','err');return}if(s.wq<95){say('Water not pure yet ('+Math.round(s.wq)+'%). Wait for the purifier.','err');return}s.qOk=1;say('Water quality verified: 99% pure','ok')})),
+    sec('2 · Oxygen'),SE.row,sec('3 · Air & carbon loop'),SC.row,SS.row,SF.row,SV.row,sec('4 · Final test'),
+    mkRow('Atmosphere check',la,mkBtn('Run',()=>{if(!m.isIn('sens')){say('No sensor data: install all five sensors first.','err');return}const x=[];
+      if(s.O2<20||s.O2>23)x.push('O₂ '+fmt(s.O2)+'% (need 20–23)');if(s.CO2>=1000)x.push('CO₂ '+Math.round(s.CO2)+' ppm (need <1000)');if(s.P<98||s.P>104)x.push('pressure '+fmt(s.P)+' kPa (need 98–104)');if(s.T<20||s.T>24)x.push('temp '+fmt(s.T)+' °C (need 20–24)');if(s.RH<40||s.RH>60)x.push('humidity '+Math.round(s.RH)+'% (need 40–60)');
+      if(x.length){say('Not ready: '+x.join('; '),'err');return}s.vOk=1;say('Atmosphere nominal for 4 crew','ok')})),scr);
+  return()=>{[SP,SE,SC,SS,SF,SV].forEach(x=>x.upd());mt.set(s.wq,s.wq>=95?'var(--ok)':'');pv.textContent=Math.round(s.wq)+'%';lampSet(lq,s.qOk?'on':'');lampSet(la,s.vOk?'on':'');
+    scr.textContent='O₂ '+fmt(s.O2)+'%  CO₂ '+Math.round(s.CO2)+' ppm  P '+fmt(s.P)+' kPa\nT '+fmt(s.T)+' °C  RH '+Math.round(s.RH)+'%  Water '+fmt(s.wt,0)+' L  O₂ store '+Math.round(s.o2s)+'%\nCO₂ + 4H₂ → CH₄ + 2H₂O (Sabatier) returns water to the loop'}}
+
+/* ================= MISSION 3: farm ================= */
+let s3,beds3=[];
+function paint(b){while(b.pl.children.length)b.pl.remove(b.pl.children[0]);const st=b.state;if(st==='empty')return;
+  const col={ok:0x3fae4a,ready:0x3fae4a,wilt:0x9aa83a,sick:0x8a6a2a,seed:0x3fae4a}[st];
+  for(let i=0;i<5;i++){const x=-1.2+i*.6,hg=st==='seed'?.12:st==='wilt'?.35:.7,s=cyl(.04,.05,hg,col,x,.4+hg/2,0,6);if(st==='wilt')s.rotation.z=.5;b.pl.add(s);
+    const l=sph(st==='seed'?.07:.2,col,x,.4+hg+.05,0);if(st==='wilt')l.scale.y=.4;b.pl.add(l);
+    if(st==='ready')b.pl.add(sph(.13,0xe0382e,x+.1,.4+hg-.15,.15));if(st==='sick')b.pl.add(sph(.1,0x5a3a1a,x,.4+hg,.2))}}
+const ecOk=()=>s3.ec>=1.6&&s3.ec<=2.05,meanHp=()=>{const l=beds3.filter(b=>b.state!=='empty');return l.length?l.reduce((a,b)=>a+b.hp,0)/l.length:100};
+const m3={tag:'MISSION 3',title:'Daily farm maintenance',blurb:'The greenhouse is running. Top up water, dose nutrients, inspect for disease, check the LEDs, harvest what is ripe and replant for tomorrow.',meta:'6 daily tasks · hydroponics',fin:0,
+  start(){
+    world([{x:0,z:0,r:22,h:0}],[],41,0,-1.4,0);s3={water:32,ec:1,dosed:0,lamp:0,diag:0,har:0,kg:0,pl:0,ins:0};m3.fin=0;
+    room({x:0,z:-6,w:22,d:12,h:4.4,door:'s',floor:0x3e4a45});
+    const st=['ready','sick','ready','wilt','ready','ok'];beds3=[];
+    [-6,-6+0,0].length;let i=0;for(const z of[-9.3,-4.8])for(const x of[-3,2.5,8]){const state=st[i++],g=grp(box(4,.7,1.6,0xc9ccd0,0,.45,0),box(3.7,.1,1.3,0x2f6fb0,0,.8,0)),pl=new THREE.Group();g.add(pl);g.position.set(x,.12,z);W.add(g);addBox(x,z,4,1.6,-5,1);
+      const b={g,pl,state,hp:state==='ready'||state==='ok'?100:state==='wilt'?55:25,seen:0};beds3.push(b);paint(b);
+      addIt(g,{range:4.4,prompt:()=>{if(b.state==='empty')return held&&held.type==='seed'?'Plant seeds':'Empty bed: needs a seed packet';if(!b.seen)return'Inspect plants';return{ready:'Harvest vegetables',sick:'Remove diseased plants',wilt:'Re-seat wilting plants'}[b.state]||null},
+        use:()=>{
+          if(b.state==='empty'){if(!held||held.type!=='seed'){say('Pick up a seed packet from the rack first.','err');return}consume(held);b.state='seed';b.hp=70;s3.pl++;paint(b);sfx.place();say('Seeds planted.','ok');return}
+          if(!b.seen){b.seen=1;s3.ins++;say({ready:'Fully grown: ripe fruit, ready to harvest.',sick:'Disease: brown leaf spots (fungal). Remove before it spreads.',wilt:'Wilting: leaves droop from low water or poor nutrient uptake. Fix the reservoir, then re-seat.',ok:'Healthy: strong green growth.'}[b.state]+' ('+s3.ins+'/6 inspected)','info');sfx.click();return}
+          if(b.state==='ready'){s3.kg+=1.4;s3.har++;b.state='empty';paint(b);sfx.pick();say('Harvested 1.4 kg of vegetables.','ok')}
+          else if(b.state==='sick'){b.state='empty';paint(b);sfx.place();say('Diseased plants removed and the bed sterilised.','ok')}
+          else if(b.state==='wilt'){if(s3.water<60||!ecOk()){say('Not yet: the reservoir needs water ≥ 60% and nutrient EC 1.6–2.0 before re-seating.','err');return}b.state='ok';b.hp=90;paint(b);sfx.ok()}}})}
+    // tank
+    const lvl=cyl(.5,.5,1.7,0x4aa8ff,0,.97,0,16,{transparent:true,opacity:.7}),tk=grp(cyl(.6,.6,1.9,0x3d6fd1,0,1.07,0,18),lvl);tk.position.set(-9,0,-10.4);W.add(tk);addBox(-9,-10.4,1.4,1.4,-5,2.2);tk.add(tag('Hydroponic water tank',2.6,'#6ff0ff'));m3.lvl=lvl;
+    addIt(tk,{range:4.5,prompt:()=>'Refill water tank (now '+Math.round(s3.water)+'%)',use:()=>{if(s3.water>=100){say('Tank is full.','info');return}s3.water=Math.min(100,s3.water+12);sfx.valve();say('Water tank at '+Math.round(s3.water)+'%','info')}});
+    const rs=grp(box(1.2,1,1.2,0x7a5a9a,0,.5,0));rs.position.set(-6.2,.12,-10.8);W.add(rs);addBox(-6.2,-10.8,1.3,1.3,-5,1.2);rs.add(tag('Nutrient reservoir',1.8,'#6ff0ff'));
+    addIt(rs,{range:4.5,prompt:()=>held&&held.type==='nut'?'Add nutrient dose (EC '+fmt(s3.ec)+')':'Reservoir EC '+fmt(s3.ec)+' (target 1.6–2.0)',use:()=>{
+      if(!held||held.type!=='nut'){say('Reservoir EC '+fmt(s3.ec)+'. Target 1.6–2.0. Fetch a nutrient canister from the shelf.','info');return}
+      consume(held);s3.ec+=.4;s3.dosed++;sfx.valve();
+      if(s3.ec>2.1){beds3.forEach(b=>{if(b.state!=='empty')b.hp-=30});say('OVERDOSE: EC '+fmt(s3.ec)+' burns roots. Crop health damaged!','err')}else say('Dosed. EC now '+fmt(s3.ec)+(ecOk()?' (in range)':''),'ok')}});
+    for(let k=0;k<3;k++){const e=makeEquip('nut','Nutrient canister',grp(cyl(.18,.18,.5,0xe8b030,0,.25,0,12)),{holdScale:.8,tagY:1});spawn(e,-9+k*.8,-2.6)}
+    for(let k=0;k<4;k++){const e=makeEquip('seed','Seed packet',grp(box(.3,.4,.05,0xd8f0c0,0,.2,0)),{holdScale:1,tagY:.9});spawn(e,6+k*.8,-2.6)}
+    sign('NUTRIENT SHELF',-8.4,2.2,-2.6);sign('SEED RACK',7.2,2.2,-2.6);
+    // LEDs
+    m3.leds=[];for(const z of[-9.3,-4.8]){const l=box(11,.12,.5,0x777777,2.5,3.5,z);l.material=glow(0xff5ac8);l.material.emissiveIntensity=0;W.add(l);m3.leds.push(l)}
+    m3.pl=new THREE.PointLight(0xff77cc,0,14);m3.pl.position.set(2.5,3.2,-7);W.add(m3.pl);
+    terminal('LED grow-light panel',10.1,-6.2,-Math.PI/2,p3Panel);
+    dashInit('Farm dashboard',[{k:'w',l:'Water reservoir'},{k:'ec',l:'Nutrient EC',max:3},{k:'e',l:'Lighting energy',max:6},{k:'hp',l:'Crop health'},{k:'f',l:'Food harvested',max:6}]);
+    s3.ready0=beds3.filter(b=>b.state==='ready').length;
+    setTasks([{id:'t1',text:'Check the water tank and refill it',hint:'Tank (west wall): press E to refill until it reads 80%+.',chk:()=>s3.water>=80},
+      {id:'t2',text:'Add the right amount of nutrients',hint:'Carry canisters from the shelf to the reservoir. Each adds EC 0.4. Aim for 1.6–2.0; too much burns roots.',chk:()=>ecOk()&&s3.dosed>0},
+      {id:'t3',text:'Inspect all plants',hint:'Look at each bed (E) to read disease, wilting and growth status.',chk:()=>s3.ins>=6},
+      {id:'t4',text:'Check and activate the LED grow lights',hint:'Panel on the east wall: run diagnostics, then switch the lights on.',chk:()=>s3.lamp&&s3.diag},
+      {id:'t5',text:'Harvest the ripe vegetables',hint:'Red-fruited beds are ready. E to harvest. Also remove diseased plants.',chk:()=>s3.har>=s3.ready0&&!beds3.some(b=>b.state==='sick')},
+      {id:'t6',text:'Replant seeds in every empty bed',hint:'Take seed packets from the rack and plant them in empty beds.',chk:()=>beds3.every(b=>b.state!=='empty')}]);
+    $('#helpX').textContent='Beds: E to inspect/act. Carry canisters and seed packets with E, drop with G.';
+    note('<b>Daily routine:</b> keep water, nutrients and light balanced, then harvest and replant. Overdosing nutrients damages the crop.',11000)},
+  update(dt){roomEnv();s3.water=Math.max(0,s3.water-.05*dt);if(s3.water<8)beds3.forEach(b=>{if(b.state!=='empty')b.hp-=2*dt});
+    m3.lvl.scale.y=Math.max(.02,s3.water/100);m3.lvl.position.y=.12+.85*m3.lvl.scale.y+.1;
+    m3.leds.forEach(l=>l.material.emissiveIntensity=s3.lamp?1.4:0);m3.pl.intensity=s3.lamp?1.3:0;
+    setLevels(s3.lamp?.4:.1,0,0);
+    if(meanHp()<20)finish(false,'Crop failure','The crop health collapsed from neglect or nutrient overdose. Keep EC at 1.6–2.0 and the tank above empty.');
+    const c=cur();if(c){way(null);if(c.chk())done(c.id)}else if(!m3.fin){m3.fin=1;later(1800,()=>finish(true,'Farm maintained','Daily maintenance complete. The harvest goes to the galley and the new seedlings are in.',[['Food delivered',fmt(s3.kg)+' kg'],['Crew-days fed (4 crew)',fmt(s3.kg/2.4,1)],['Beds replanted',s3.pl]]))}},
+  hud(){dash('w',s3.water,Math.round(s3.water)+' %',s3.water<20?'bad':s3.water<50?'warn':'ok');dash('ec',s3.ec,fmt(s3.ec),ecOk()?'ok':s3.ec>2.05?'bad':'warn');dash('e',s3.lamp?4.2:0,s3.lamp?'4.2 / 6 kW':'lights off',s3.lamp?'ok':'');dash('hp',meanHp(),Math.round(meanHp())+' %',meanHp()<40?'bad':meanHp()<70?'warn':'ok');dash('f',s3.kg,fmt(s3.kg)+' kg','')}};
+function p3Panel(b){const ld=mkLamp(),sw=mkSw(s3,'LED grow lights','lamp',()=>s3.diag?null:'Run the LED diagnostics first: always check the drivers before switching on.'),t=h('div',{class:'scr'});
+  b.append(sec('Grow-light control'),mkRow('LED diagnostics',ld,mkBtn('Run',()=>{s3.diag=1;say('Diagnostics: 24/24 strips responding. Spectrum 660 nm red + 450 nm blue.','ok')})),sw.row,t);
+  return()=>{lampSet(ld,s3.diag?'on':'');sw.upd();t.textContent='Power draw '+(s3.lamp?'4.2':'0.0')+' kW of 6 kW available\nPhotoperiod target: 16 h light / 8 h dark\nRed/blue LEDs match chlorophyll absorption'}}
+
+/* ================= MISSION 4: radiation emergency ================= */
+let s4,rv,rvm,pile4,glow4,door4,dcol4,detEq,scoopFill;
+const BR=V3(1.2,0,-9.4),DUMP=V3(1.2,0,-14.5),DIG=V3(24,0,16);
+const radAt=p=>{const inside=Math.abs(p.x)<7&&Math.abs(p.z+6)<4,lk=(1-s4.int/100)*s4.ramp*2.4;return inside?.03+lk*(.2+.8*Math.exp(-((p.x-BR.x)**2+(p.z-BR.z)**2)/14)):.25};
+const shAvg=()=>.03+(1-s4.int/100)*s4.ramp*2.4*.45;
+const m4={tag:'MISSION 4',title:'Radiation shelter emergency',blurb:'A micrometeorite breached the regolith shield. Find the leak, suit up, drive the rover to fetch regolith and seal the shelter before the crew dose limit.',meta:'8 tasks · rover · 10 min timer',fin:0,
+  start(){
+    world([{x:0,z:0,r:16,h:0},{x:24,z:16,r:9,h:0},{x:10,z:6,r:6,h:0}],[],55,0,-3.8,0);
+    s4={int:20,ramp:1,tt:0,dose:0,suited:0,door:0,load:0,suitO2:100,det:0,rov:0,mon:0,ver:0,rd:0,near:0};m4.fin=0;
+    room({x:0,z:-6,w:14,d:8,h:3.6,door:'s',floor:0x4a5560});
+    const rm=new THREE.MeshStandardMaterial({color:0x8d877d,roughness:1});
+    for(const [x,w] of[[-4.1,5.8],[5.25,3.5]]){const bm=new THREE.Mesh(new THREE.BoxGeometry(w,2.6,3),rm);bm.position.set(x,1.3,-12);W.add(bm);addBox(x,-12,w,3,-5,3)}
+    pile4=new THREE.Mesh(new THREE.BoxGeometry(4.4,2.6,3),rm);pile4.position.set(1.2,.05,-12);W.add(pile4);
+    glow4=new THREE.Mesh(new THREE.PlaneGeometry(2.6,1.4),new THREE.MeshBasicMaterial({color:0xff2a1a,transparent:true,opacity:.6,depthWrite:false}));glow4.position.set(1.2,1.7,-9.8);W.add(glow4);
+    sign('DAMAGED SHIELD',1.2,3.6,-14.5,0,'#ff5a4d');sign('REGOLITH DIG SITE',24,2.8,16);
+    for(let i=0;i<7;i++){const mm=new THREE.Mesh(new THREE.DodecahedronGeometry(1+Math.random(),0),rm);mm.position.set(DIG.x+(Math.random()-.5)*6,.5,DIG.z+(Math.random()-.5)*6);W.add(mm)}
+    const dm=box(2.8,2.6,.25,0x6a737d,0,1.4,-2);dm.position.set(0,1.4,-2);W.add(dm);door4=dm;dcol4=addBox(0,-2,2.8,.5,-5,3);
+    terminal('Airlock control',-2.3,-2.55,0,b=>{b.append(sec('Airlock'),mkRow('Cycle outer door',mkBtn('Cycle',()=>{if(!s4.suited){say('Airlock refuses to open: you are not in a spacesuit. There is vacuum outside!','err');return}s4.door=1;sfx.valve();say('Airlock cycled: outer door open.','ok');closePanel()})));return null});
+    const lk=grp(box(1.2,2,.6,0x39424c,0,1,0));lk.position.set(-5.8,.12,-3.3);W.add(lk);addBox(-5.8,-3.3,1.3,.8,-5,2);lk.add(tag('Spacesuit locker',2.6,'#6ff0ff'));
+    addIt(lk,{range:4,prompt:()=>s4.suited?null:'Put on spacesuit',use:()=>{s4.suited=1;$('#suit').hidden=false;sfx.ok();say('Spacesuit on: pressurised, life-support online.','ok')}});
+    terminal('Radiation monitoring',-6,-9.3,0,p4Panel);
+    detEq=makeEquip('det','Radiation detector',unit(.3,.6,.15,0x2a2f35),{holdScale:.7,tagY:1.1,onPick:()=>{s4.det=1},onDrop:()=>{}});spawn(detEq,-3.5,-4.5);detEq.model.position.y=.12;
+    rvm=new THREE.Group();rvm.add(box(2.4,.5,3.4,0xd8d8d0,0,.85,0),box(1.7,.6,1.4,0x9aa5b0,0,1.35,.5),box(.08,1.4,.08,0xaaaaaa,.8,1.9,.9));
+    for(const sx of[-1.3,1.3])for(const sz of[-1.2,0,1.2]){const w=cyl(.45,.45,.3,0x222222,sx,.45,sz,14);w.rotation.z=Math.PI/2;rvm.add(w)}
+    rvm.add(box(2.2,.4,1,0xc9a227,0,.7,-2.1));scoopFill=box(2,.5,.9,0x8a8a88,0,.95,-2.1);scoopFill.scale.y=.01;rvm.add(scoopFill);rvm.add(tag('Lunar rover',3,'#ffb02e'));
+    rvm.rotation.order='YXZ';rvm.position.set(10,heightAt(10,6),6);W.add(rvm);rv={x:10,z:6,yaw:0,v:0};
+    addIt(rvm,{range:5,enabled:()=>P.mode==='walk',prompt:()=>s4.suited?'Drive the lunar rover':'Suit up first',use:()=>{if(!s4.suited){say('Put on your spacesuit before leaving the shelter.','err');return}P.mode='rover';s4.rov=1;if(held)dropHeld();sfx.ok();$('#helpX').textContent='ROVER  W/S drive · A/D steer · R scoop (dig site) / dump (damaged section) · X exit rover'}});
+    dashInit('Radiation dashboard',[{k:'rd',l:'Dose rate at you',max:5},{k:'sh',l:'Shelter average',max:3},{k:'in',l:'Shield integrity'},{k:'cd',l:'Crew dose (limit 50 mSv)',max:50},{k:'ld',l:'Rover regolith load'}]);
+    $('#helpX').textContent='Detector: pick it up (E) and walk the walls. G drops items.';$('#det').hidden=true;
+    setTasks([{id:'t1',text:'Locate the damaged section with the detector',hint:'Pick up the detector, walk the north wall: the reading peaks at the breach (red glow).',chk:()=>s4.det&&Math.abs(P.pos.x-BR.x)<2.6&&Math.abs(P.pos.z-BR.z)<2.6&&P.mode==='walk'},
+      {id:'t2',text:'Put on a spacesuit and exit the habitat',hint:'Suit locker (west), then cycle the airlock by the door and walk outside.',chk:()=>s4.suited&&s4.door&&P.pos.z>1},
+      {id:'t3',text:'Locate and operate the lunar rover',hint:'Rover is parked south-east of the airlock. E to climb in.',chk:()=>s4.rov},
+      {id:'t4',text:'Collect regolith at the dig site',hint:'Drive onto the marked patch (north-east) and press R to scoop until full.',chk:()=>s4.load>=100},
+      {id:'t5',text:'Transport regolith to the damaged section',hint:'Drive round to the north side of the shelter, to the marked breach.',chk:()=>s4.load>0&&rvDist(DUMP)<7},
+      {id:'t6',text:'Repair the shielding layer',hint:'Press R at the breach to dump. A full load seals it; partial loads fill in proportion.',chk:()=>s4.int>=100},
+      {id:'t7',text:'Return to the shelter and activate monitoring',hint:'Press X to leave the rover, walk into the shelter and use the monitoring console.',chk:()=>s4.mon},
+      {id:'t8',text:'Verify radiation is back to safe levels',hint:'Monitoring console: Verify. Shelter average must be under 0.12 mSv/h.',chk:()=>s4.ver}]);
+    note('<b>ALERT:</b> radiation is leaking and rising. Crew dose limit is 50 mSv. Find the breach before the clock runs out.',12000)},
+  update(dt){
+    roomEnv();s4.tt+=dt;const left=Math.max(0,600-s4.tt);s4.ramp=1+.9*s4.tt/600;setTimer('Shield failing · time left',left,90);
+    if(left<=0){finish(false,'Shelter lost','Time ran out and the radiation leak was not sealed. The crew was evacuated with a dangerous dose.');return}
+    s4.dose+=shAvg()*dt/40;if(s4.dose>=50){finish(false,'Crew dose limit exceeded','The crew absorbed more than 50 mSv. Faster repairs would have kept them safe.');return}
+    door4.visible=!s4.door;dcol4.on=!s4.door;
+    if(P.mode==='rover')drive(dt);
+    const pos=P.mode==='rover'?V3(rv.x,0,rv.z):P.pos;s4.rd=radAt(pos);
+    const out=!(Math.abs(P.pos.x)<7&&Math.abs(P.pos.z+6)<4);if(s4.suited&&out){s4.suitO2-=.06*dt;if(s4.suitO2<=0){finish(false,'Suit oxygen depleted','You stayed outside too long. Plan the rover trips and return in time.');return}}
+    const k=Math.max(.04,s4.int/100);pile4.scale.y=k;pile4.position.y=1.3*k;glow4.material.opacity=.7*(1-s4.int/100);glow4.visible=s4.int<100;
+    scoopFill.scale.y=Math.max(.01,s4.load/100);
+    {const z=P.mode!=='rover'?0:rvDist(DIG)<7&&s4.load<100?'dig':rvDist(DUMP)<7&&s4.load>0?'dump':0;if(z!==s4.zone){s4.zone=z;if(z==='dig')say('At the dig site: press R to scoop regolith (3 scoops fill the bucket).','info');if(z==='dump')say('At the damaged section: press R to dump the regolith onto the breach.','info')}}
+    setLevels(.2,s4.int<100?(left<90?1:.5):0,0);
+    const c=cur();if(c){way(c.id==='t1'?V3(1.2,1.6,-9.4):c.id==='t2'?V3(-2.3,1.8,-2.6):c.id==='t3'?rvm.position:c.id==='t4'||(c.id==='t6'&&s4.load<=0)?V3(DIG.x,2,DIG.z):c.id==='t7'||c.id==='t8'?V3(-6,1.8,-9.3):V3(DUMP.x,2,DUMP.z));if(c.chk())done(c.id)}
+    else if(!m4.fin){m4.fin=1;way(null);later(1800,()=>finish(true,'Shelter sealed','Shielding restored. Dose rate is back to safe levels and the crew is protected.',[['Crew dose',fmt(s4.dose,1)+' mSv'],['Time left',mmss(600-s4.tt)]]))}},
+  onKey(code){if(P.mode!=='rover')return;
+    if(code==='KeyX'){P.mode='walk';P.pos.set(rv.x+Math.cos(rv.yaw)*2.8,0,rv.z-Math.sin(rv.yaw)*2.8);P.pos.y=heightAt(P.pos.x,P.pos.z);P.vx=P.vz=0;rv.v=0;$('#helpX').textContent='Detector: pick it up (E) and walk the walls. G drops items.';return}
+    if(code==='KeyR'){
+      if(rvDist(DIG)<7){if(s4.load>=100){say('Scoop is full: deliver the load to the damaged section.','info');return}s4.load=Math.min(100,s4.load+34);sfx.pick();say('Regolith loaded: '+Math.round(s4.load)+'%','ok')}
+      else if(rvDist(DUMP)<7){if(s4.load<=0){say('Scoop is empty: fetch regolith from the dig site.','err');return}s4.int=Math.min(100,s4.int+s4.load*.8);s4.load=0;sfx.place();say('Regolith dumped onto the breach. Integrity '+Math.round(s4.int)+'%','ok')}
+      else say('Nothing to scoop or dump here. Dig site is north-east; the breach is on the north side of the shelter.','err')}},
+  hud(){const hd=held===detEq;$('#det').hidden=!hd;if(hd){$('#detV').textContent=fmt(s4.rd,2);$('#detV').style.color=s4.rd>.5?'var(--bad)':s4.rd>.12?'var(--accent)':'var(--ok)';$('#detB').style.width=clamp(s4.rd/3,0,1)*100+'%';$('#detU').textContent='mSv/h · safe < 0.12'}
+    if(s4.suited)$('#suit').innerHTML='<b>SPACESUIT</b><br>O₂ '+Math.round(s4.suitO2)+'% · 29.6 kPa<br>Dose here '+fmt(s4.rd,2)+' mSv/h';
+    dash('rd',s4.rd,fmt(s4.rd,2)+' mSv/h',s4.rd>.5?'bad':s4.rd>.12?'warn':'ok');dash('sh',shAvg(),fmt(shAvg(),2)+' mSv/h',shAvg()>.5?'bad':shAvg()>.12?'warn':'ok');dash('in',s4.int,Math.round(s4.int)+' %',s4.int>=100?'ok':'warn');dash('cd',s4.dose,fmt(s4.dose,1)+' mSv',s4.dose>35?'bad':s4.dose>20?'warn':'ok');dash('ld',s4.load,Math.round(s4.load)+' %','')}};
+const rvDist=p=>Math.hypot(rv.x-p.x,rv.z-p.z);
+function drive(dt){
+  const fw=(K.KeyW?1:0)-(K.KeyS?1:0),st=(K.KeyA?1:0)-(K.KeyD?1:0);
+  rv.v+=(fw*9-rv.v)*Math.min(1,1.6*dt);rv.yaw+=st*1.3*dt*clamp(rv.v/3,-1,1);
+  rv.x+=-Math.sin(rv.yaw)*rv.v*dt;rv.z+=-Math.cos(rv.yaw)*rv.v*dt;
+  const tp=V3(rv.x,0,rv.z);collide(tp,1.7);rv.x=tp.x;rv.z=tp.z;const R=Math.hypot(rv.x,rv.z);if(R>240){rv.x*=240/R;rv.z*=240/R}
+  const sn=Math.sin(rv.yaw),cs=Math.cos(rv.yaw),y=heightAt(rv.x,rv.z),hf=heightAt(rv.x-sn*1.8,rv.z-cs*1.8),hb=heightAt(rv.x+sn*1.8,rv.z+cs*1.8);
+  rvm.position.set(rv.x,y,rv.z);rvm.rotation.set(Math.atan2(hf-hb,3.6),rv.yaw,0);
+  P.yaw=rv.yaw;P.pos.set(rv.x,y,rv.z);camera.position.set(rv.x-sn*.3,y+1.75,rv.z-cs*.3);
+  if(Math.abs(rv.v)>1&&S.time%.4<dt)sfx.step()}
+function p4Panel(b){const la=mkLamp(),lv=mkLamp(),scr=h('div',{class:'scr'}),cv=h('canvas',{class:'gr',width:560,height:110}),H=hist(cv);let n=0;
+  b.append(sec('Radiation monitoring'),mkRow('Monitoring system',la,mkBtn('Activate',()=>{if(s4.int<100){say('Shield still breached: repair the regolith layer before relying on the monitor.','err');return}s4.mon=1;say('Radiation monitoring ACTIVE','ok')})),
+    mkRow('Safe-level verification',lv,mkBtn('Verify',()=>{if(!s4.mon){say('Activate the monitoring system first.','err');return}if(shAvg()>.12){say('Shelter average '+fmt(shAvg(),2)+' mSv/h is above the 0.12 safe level.','err');return}s4.ver=1;say('Radiation levels SAFE','ok')})),scr,cv);
+  return()=>{lampSet(la,s4.mon?'on':'');lampSet(lv,s4.ver?'on':'');scr.textContent='Shelter avg '+fmt(shAvg(),2)+' mSv/h   Integrity '+Math.round(s4.int)+'%\nCrew dose '+fmt(s4.dose,1)+' / 50 mSv   Safe < 0.12 mSv/h';if(++n%2==0)H.push(shAvg(),0);H.draw(3)}}
+
+/* ================= boot ================= */
+MISSIONS.push(m1,m2,m3,m4);
+let REC={};try{REC=JSON.parse(localStorage.getItem('lunarRec')||'{}')}catch(e){}
+function saveRec(){try{localStorage.setItem('lunarRec',JSON.stringify(REC))}catch(e){}}
+const _finish=finish;
+finish=function(ok,title,msg,extra){const was=S.state,idx=S.idx,err=S.errors,t=S.time-S.t0;_finish(ok,title,msg,extra);
+  if(was==='play'&&ok){const stars=err<=3?3:err<=8?2:1,r=REC[idx]||{runs:0};REC[idx]={runs:r.runs+1,stars:Math.max(r.stars||0,stars),time:r.time?Math.min(r.time,t):t};saveRec()}};
+function renderCards(){
+  const box=$('#cards');box.innerHTML='';const done=MISSIONS.filter((m,i)=>REC[i]).length,stars=MISSIONS.reduce((a,m,i)=>a+(REC[i]?REC[i].stars:0),0);
+  box.append(h('div',{class:'dbar',style:'grid-column:1/-1'},h('div',null,'Missions complete',h('b',null,done+' / '+MISSIONS.length)),h('div',null,'Total rating',h('b',null,stars+' / '+MISSIONS.length*3+' ★')),h('div',null,'Status',h('b',null,done===MISSIONS.length?'Outpost habitable':'Outpost under construction')),mkBtn('Reset progress',()=>{REC={};saveRec();renderCards()})));
+  MISSIONS.forEach((m,i)=>{const r=REC[i];box.append(h('div',{class:'card'+(r?' cl':'')},h('div',{class:'bd'},h('span',{class:'t',textContent:m.tag}),h('span',{class:'st',textContent:r?'COMPLETE':'NOT STARTED'})),h('h2',{textContent:m.title}),h('p',{textContent:m.blurb}),h('div',{class:'meta',textContent:m.meta}),
+    h('div',{class:'bd'},h('span',{class:'stars',textContent:r?'★'.repeat(r.stars)+'☆'.repeat(3-r.stars):'☆☆☆'}),h('span',null,r?'Best '+mmss(r.time)+' · '+r.runs+' run'+(r.runs>1?'s':''):'No attempts yet')),
+    mkBtn(r?'Replay mission':'Start mission',()=>startMission(i),'big')))})}
+const _toMenu=toMenu;toMenu=function(){_toMenu();renderCards()};
+$('#hud').append(h('button',{class:'btn',id:'dashBtn',textContent:'Mission select',on:{click:e=>{const b=e.currentTarget;if(b.dataset.arm){b.dataset.arm='';b.textContent='Mission select';sfx.click();toMenu()}else{b.dataset.arm='1';b.textContent='Click again to leave (progress lost)';setTimeout(()=>{b.dataset.arm='';b.textContent='Mission select'},3000)}}}}));
+toMenu();requestAnimationFrame(loop);
+</script>
